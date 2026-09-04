@@ -1,7 +1,10 @@
-# OB Slips
+# HR Forms
 
-Upload a timekeeping export, fill in what you were doing on the days with no
-record, and print Official Business Slips.
+Two printable forms, one app:
+
+- **Official Business** (`/`) — upload a timekeeping export, fill in what you
+  were doing on the days with no record, print the slips.
+- **Application for Leave** (`/leave`) — HRM F015, one form per leave period.
 
 ```bash
 npm install
@@ -9,9 +12,11 @@ npm run dev      # http://localhost:3000
 ```
 
 No database, no accounts. Files are parsed in memory and never written to disk;
-your defaults (position, usual From/To, personnel) live in `localStorage`.
+your defaults live in `localStorage`.
 
-## How it works
+## Official Business slips
+
+### How it works
 
 1. **Upload** — the export is read with SheetJS, which handles the old BIFF2
    `.XLS` these systems produce as well as modern `.xlsx`.
@@ -60,7 +65,38 @@ Some exports contain *only* the absent days. Those rows have no punches, so
 they are detected on their own — just make sure **From** / **To** cover the
 period you are filing for rather than only what the file happens to span.
 
-## Layout
+## Application for Leave
+
+`/leave` is independent of the attendance scan — you enter the employee
+details, the type of leave, and one or more periods. **Each period prints its
+own form**, since the form carries a single From / To / No. of days. Add a
+period for each unbroken stretch of leave.
+
+- **No. of days** counts Mon–Fri only and updates as you change the dates;
+  type over it for half-days or a different counting rule and it stops
+  tracking.
+- **Record the dates under** picks the VL or SL column for the From / To /
+  No. of days values. It follows the leave type (Sick → SL, everything else →
+  VL) until you override it.
+- The **leave-balance grid** (Allowable, Taken prior, Balance, Applied for,
+  Remaining) is deliberately left blank — HR fills those from the 201 file,
+  and wrong numbers on a signed form are worse than blank ones.
+
+### A caveat on this layout
+
+Unlike the OB slip, `lib/afl-pdf.ts` was rebuilt from a **photograph of a
+printed form**, not measured from a source PDF. The structure is right and it
+prints correctly on Letter, but the constants are proportional judgements
+rather than measurements. If the original file turns up, re-measure and replace
+the numbers at the top of that file; nothing else has to change.
+
+There is no logo on this form, matching the photo.
+
+```bash
+npx tsx scripts/preview-leave.mjs afl.pdf   # sample form for eyeballing
+```
+
+## Layout of the OB slip
 
 `lib/obp-pdf.ts` reproduces the printed form rather than approximating it —
 column stops, the 28pt row pitch, the four Helvetica sizes, and the offsets of
@@ -82,14 +118,19 @@ will not fit.
 
 ```
 app/
-  page.tsx              the whole UI - upload, grid, print
-  api/parse/route.ts    POST an export -> employee, range, missing days
-  api/pdf/route.ts      POST header + entries -> application/pdf
+  page.tsx                 OB slips - upload, grid, print
+  leave/page.tsx           leave applications
+  nav.tsx                  the two tabs
+  api/parse/route.ts       POST an export -> employee, range, missing days
+  api/pdf/route.ts         POST header + entries -> application/pdf
+  api/leave-pdf/route.ts   POST a leave request -> application/pdf
 lib/
-  attendance.ts         reading the export, finding the gaps
-  obp-pdf.ts            the form renderer
-  cutoff.ts             the payroll cut-off calendar
-  dates.ts              calendar helpers (UTC only, never local time)
+  attendance.ts            reading the export, finding the gaps
+  obp-pdf.ts               the OB slip renderer (measured)
+  afl-pdf.ts               the leave form renderer (from a photo)
+  pdf-text.ts              drawing primitives shared by both
+  cutoff.ts                the payroll cut-off calendar
+  dates.ts                 calendar helpers (UTC only, never local time)
 ```
 
 ## Command-line version

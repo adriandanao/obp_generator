@@ -42,3 +42,31 @@ export type PdfRequest = {
   header: SlipHeader;
   entries: Entry[];
 };
+
+// --------------------------------------------------------------- leave ----
+
+export type LeaveKind = "vacation" | "sick" | "emergency" | "other";
+
+/** One unbroken stretch of leave; each period prints its own form. */
+export type LeavePeriod = {
+  /** ISO yyyy-mm-dd */
+  from: string;
+  to: string;
+  /** Free text so half-days ("2.5") and local counting rules survive. */
+  days: string;
+};
+
+export type LeaveRequest = {
+  name: string;
+  position: string;
+  department: string;
+  /** Printed verbatim after "Date Prepared:". */
+  datePrepared: string;
+  kind: LeaveKind;
+  /** Only used when `kind` is "other". */
+  otherText: string;
+  /** Which column the From/To/No-of-days values go in. */
+  recordUnder: "VL" | "SL";
+  reason: string;
+  periods: LeavePeriod[];
+};

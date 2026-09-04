@@ -99,6 +99,14 @@ export function parseDate(value: unknown): string | null {
   return null;
 }
 
+/** How many Mon-Fri days fall in an inclusive range. */
+export function countWeekdays(start: string, end: string): number {
+  if (!start || !end || start > end) return 0;
+  let n = 0;
+  for (let d = start; d <= end; d = addDays(d, 1)) if (isWeekday(d)) n++;
+  return n;
+}
+
 /** Inclusive list of every date from `start` to `end`. */
 export function eachDay(start: string, end: string): string[] {
   const out: string[] = [];

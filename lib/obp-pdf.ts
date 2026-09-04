@@ -10,9 +10,10 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { PDFDocument, PDFFont, PDFImage, PDFPage, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument, PDFFont, PDFImage, PDFPage, StandardFonts } from "pdf-lib";
 
 import { fmtShort } from "./dates";
+import { baseline, centred, drawBlock, rule, text } from "./pdf-text";
 import type { Entry, SlipHeader } from "./types";
 
 const PAGE_W = 612;
@@ -44,8 +45,6 @@ const SIZE_FIELD = 8;
 const SIZE_THEAD = 7;
 const SIZE_CELL = 8;
 const SIZE_SMALL = 6;
-const LINE_W = 0.5;
-const BLACK = rgb(0, 0, 0);
 
 type Resources = { regular: PDFFont; bold: PDFFont; logo: PDFImage | null };
 
@@ -66,106 +65,7 @@ function loadLogo(): Uint8Array | null {
   return logoBytes;
 }
 
-// ---------------------------------------------------------------- text ----
-
-function wrap(text: string, font: PDFFont, size: number, width: number) {
-  const lines: string[] = [];
-  let cur = "";
-  for (const word of String(text).split(/\s+/).filter(Boolean)) {
-    const trial = cur ? `${cur} ${word}` : word;
-    if (!cur || font.widthOfTextAtSize(trial, size) <= width) {
-      cur = trial;
-    } else {
-      lines.push(cur);
-      cur = word;
-    }
-  }
-  if (cur) lines.push(cur);
-  return lines.length ? lines : [""];
-}
-
-function ellipsize(line: string, font: PDFFont, size: number, width: number) {
-  if (font.widthOfTextAtSize(line, size) <= width) return line;
-  let s = line;
-  while (s && font.widthOfTextAtSize(`${s}...`, size) > width) s = s.slice(0, -1);
-  return `${s.trimEnd()}...`;
-}
-
-/**
- * Wrap `text` into a width x height cell, shrinking the font a half-point at
- * a time; the smaller the font, the more lines the row can hold.  At 8pt in a
- * 26pt row that is the two lines the printed form uses.  Nothing is dropped
- * silently: text that cannot fit even at `floor` is ellipsized.
- */
-function fit(
-  text: string,
-  font: PDFFont,
-  width: number,
-  height: number,
-  size = 8.0,
-  floor = 6.0,
-) {
-  for (let s = size; s >= floor; s -= 0.5) {
-    const leading = s + 2.0;
-    const allowed = Math.max(1, Math.floor(height / leading));
-    const lines = wrap(text, font, s, width);
-    const fits = lines.every((ln) => font.widthOfTextAtSize(ln, s) <= width);
-    if (lines.length <= allowed && fits) return { lines, size: s, leading };
-  }
-
-  const s = floor;
-  const leading = floor + 2.0;
-  const allowed = Math.max(1, Math.floor(height / leading));
-  let lines = wrap(text, font, s, width);
-  if (lines.length > allowed) {
-    const kept = lines.slice(0, allowed);
-    kept[allowed - 1] = ellipsize(lines.slice(allowed - 1).join(" "), font, s, width);
-    lines = kept;
-  }
-  return { lines: lines.map((ln) => ellipsize(ln, font, s, width)), size: s, leading };
-}
-
-/** Baseline of line `index` of an n-line block optically centred on `center`. */
-function baseline(center: number, size: number, n: number, index: number, leading: number) {
-  return center + ((n - 1) * leading) / 2 - index * leading - 0.35 * size;
-}
-
 // -------------------------------------------------------------- drawing ----
-
-function text(page: PDFPage, s: string, x: number, y: number, font: PDFFont, size: number) {
-  page.drawText(s, { x, y, size, font, color: BLACK });
-}
-
-function centred(
-  page: PDFPage, s: string, left: number, right: number, y: number,
-  font: PDFFont, size: number,
-) {
-  const x = (left + right) / 2 - font.widthOfTextAtSize(s, size) / 2;
-  page.drawText(s, { x, y, size, font, color: BLACK });
-}
-
-function rule(page: PDFPage, x1: number, y1: number, x2: number, y2: number, dash?: number[]) {
-  page.drawLine({
-    start: { x: x1, y: y1 },
-    end: { x: x2, y: y2 },
-    thickness: LINE_W,
-    color: BLACK,
-    dashArray: dash,
-  });
-}
-
-function drawBlock(
-  page: PDFPage, value: string, font: PDFFont, left: number, right: number,
-  center: number, align: "center" | "left", pad = 2.0, height = ROW_H - 2.0,
-) {
-  const width = right - left - 2 * pad;
-  const { lines, size, leading } = fit(value, font, width, height, SIZE_CELL);
-  lines.forEach((line, i) => {
-    const y = baseline(center, size, lines.length, i, leading);
-    if (align === "center") centred(page, line, left, right, y, font, size);
-    else text(page, line, left + pad, y, font, size);
-  });
-}
 
 // The header underlines start just after the label and overhang the value.
 // Calibrated against the reference PDF using pdf-lib's own Helvetica metrics,
@@ -250,7 +150,8 @@ function drawSlip(
     ];
     for (const [value, a, b, align] of cells) {
       if (String(value ?? "").trim()) {
-        drawBlock(page, String(value), regular, COLS[a], COLS[b], mid, align);
+        drawBlock(page, String(value), regular, SIZE_CELL,
+                  COLS[a], COLS[b], mid, align, ROW_H - 2.0);
       }
     }
   });
