@@ -15,9 +15,10 @@ your defaults (position, usual From/To, personnel) live in `localStorage`.
 
 1. **Upload** — the export is read with SheetJS, which handles the old BIFF2
    `.XLS` these systems produce as well as modern `.xlsx`.
-2. **Scan** — every Mon–Fri date in the covered range that has *no row at all*
-   is a missing work day. Days that are holidays, rest days (`do_flag`) or
-   approved leave (`leave` / `lv_type`) are listed as skipped, never offered.
+2. **Scan** — every Mon–Fri date in the range that has *no row at all* is a
+   missing work day. Days that are holidays, rest days (`do_flag`) or approved
+   leave (`leave` / `lv_type`) are listed as skipped, never offered. The range
+   defaults to the cut-off period you are currently filing for (below).
 3. **Fill** — one row per missing day. *Copy first row down* propagates the
    first row's details to the rest, which is usually what you want.
 4. **Print** — four entries per slip, two identical copies per page separated
@@ -25,6 +26,23 @@ your defaults (position, usual From/To, personnel) live in `localStorage`.
 
 Time In / Time Out are seeded from the `shift` column: `HO/WARE (08:30 - 17:30)`
 becomes 08:30 / 17:30.
+
+### Cut-off periods
+
+Two per month, computed in `lib/cutoff.ts`:
+
+| Period | Filed |
+| --- | --- |
+| 25th of the previous month → 10th | 20th of the month |
+| 11th → 24th | 5th of the next month |
+
+The picker opens on the period you are currently filing for — the earliest one
+whose filing date has not yet passed — and sets the two date fields to match.
+Editing either date by hand switches the picker to **Custom**; **Whatever the
+file covers** falls back to the export's own first and last dates.
+
+If the calendar ever moves, change the four day-of-month numbers at the top of
+`lib/cutoff.ts`; everything else derives from them.
 
 ### If your export only lists absences
 
@@ -63,6 +81,7 @@ app/
 lib/
   attendance.ts         reading the export, finding the gaps
   obp-pdf.ts            the form renderer
+  cutoff.ts             the payroll cut-off calendar
   dates.ts              calendar helpers (UTC only, never local time)
 ```
 

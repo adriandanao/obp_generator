@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { fmtShort } from "@/lib/dates";
+import { type Cutoff, cutoffsAround, dueCutoff } from "@/lib/cutoff";
+import { fmtShort, isoOf } from "@/lib/dates";
 import type { Entry, ParseResult } from "@/lib/types";
 
 type Draft = Entry & { include: boolean; label: string };
@@ -47,12 +48,21 @@ function saveDefaults(d: Defaults) {
   }
 }
 
-const todayShort = () => fmtShort(new Date().toISOString().slice(0, 10));
+/** Local calendar date - toISOString() would roll over a day ahead of UTC. */
+function todayIso() {
+  const n = new Date();
+  return isoOf(n.getFullYear(), n.getMonth() + 1, n.getDate());
+}
+
+/** Sentinel option values for the cut-off picker. */
+const FILE_RANGE = "file";
+const CUSTOM = "custom";
 
 export default function Page() {
   const [file, setFile] = useState<File | null>(null);
   const [over, setOver] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [rendering, setRendering] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [result, setResult] = useState<ParseResult | null>(null);
@@ -63,6 +73,8 @@ export default function Page() {
   const [to, setTo] = useState("");
   const [includeAbsent, setIncludeAbsent] = useState(false);
   const [holidays, setHolidays] = useState("");
+  const [cutoffs, setCutoffs] = useState<Cutoff[]>([]);
+  const [cutoffId, setCutoffId] = useState<string>(FILE_RANGE);
 
   const [position, setPosition] = useState("");
   const [slipDate, setSlipDate] = useState("");
@@ -70,16 +82,27 @@ export default function Page() {
   const inputRef = useRef<HTMLInputElement>(null);
   const defaultsRef = useRef<Defaults>(EMPTY_DEFAULTS);
 
+  // "Today" is only known on the client, so the cut-off calendar is built
+  // after mount rather than during render.
   useEffect(() => {
     const d = loadDefaults();
     defaultsRef.current = d;
     setPosition(d.position);
-    setSlipDate(todayShort());
+
+    const today = todayIso();
+    setSlipDate(fmtShort(today));
+    setCutoffs(cutoffsAround(today));
+    const due = dueCutoff(today);
+    if (due) {
+      setCutoffId(due.id);
+      setFrom(due.start);
+      setTo(due.end);
+    }
   }, []);
 
   const analyse = useCallback(
     async (theFile: File, over: Partial<Record<string, string | boolean>> = {}) => {
-      setBusy(true);
+      setScanning(true);
       setError(null);
       try {
         const fd = new FormData();
@@ -96,6 +119,10 @@ export default function Page() {
         const parsed = data as ParseResult;
         setResult(parsed);
         if (!empno && parsed.employees.length === 1) setEmpno(parsed.empno);
+        // Seed the pickers with the file's own range so there is something to
+        // nudge, rather than two empty date fields.
+        setFrom((v) => v || parsed.rangeStart);
+        setTo((v) => v || parsed.rangeEnd);
 
         const d = defaultsRef.current;
         setRows(
@@ -116,7 +143,7 @@ export default function Page() {
         setResult(null);
         setRows([]);
       } finally {
-        setBusy(false);
+        setScanning(false);
       }
     },
     [empno, from, to, includeAbsent, holidays],
@@ -126,9 +153,24 @@ export default function Page() {
     if (!f) return;
     setFile(f);
     setEmpno("");
-    setFrom("");
-    setTo("");
-    void analyse(f, { empno: "", from: "", to: "" });
+    // Keep whichever cut-off is selected; only fall back to the file's own
+    // range when the picker is not on a period.
+    const sel = cutoffs.find((c) => c.id === cutoffId);
+    const range = sel ? { from: sel.start, to: sel.end } : { from: "", to: "" };
+    setFrom(range.from);
+    setTo(range.to);
+    void analyse(f, { empno: "", ...range });
+  }
+
+  function pickCutoff(id: string) {
+    setCutoffId(id);
+    if (id === CUSTOM) return;
+
+    const c = cutoffs.find((x) => x.id === id);
+    const range = c ? { from: c.start, to: c.end } : { from: "", to: "" };
+    setFrom(range.from);
+    setTo(range.to);
+    if (file) void analyse(file, range);
   }
 
   const chosen = useMemo(() => rows.filter((r) => r.include), [rows]);
@@ -164,7 +206,7 @@ export default function Page() {
 
   async function generate() {
     if (!result) return;
-    setBusy(true);
+    setRendering(true);
     setError(null);
     try {
       const entries: Entry[] = chosen.map(({ include, label, ...e }) => e);
@@ -209,7 +251,7 @@ export default function Page() {
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setBusy(false);
+      setRendering(false);
     }
   }
 
@@ -283,45 +325,68 @@ export default function Page() {
               )}
             </div>
 
-            <div className="grid cols-4" style={{ marginTop: 18 }}>
-              {result.employees.length > 1 && (
-                <div>
-                  <label htmlFor="emp">Employee</label>
-                  <select
-                    id="emp"
-                    value={empno}
-                    onChange={(e) => {
-                      setEmpno(e.target.value);
-                      if (file) void analyse(file, { empno: e.target.value });
-                    }}
-                  >
-                    <option value="">Choose&hellip;</option>
-                    {result.employees.map((e) => (
-                      <option key={e.empno} value={e.empno}>
-                        {e.name} ({e.empno})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+            {result.employees.length > 1 && (
+              <div style={{ marginTop: 18, maxWidth: 320 }}>
+                <label htmlFor="emp">Employee</label>
+                <select
+                  id="emp"
+                  value={empno}
+                  onChange={(e) => {
+                    setEmpno(e.target.value);
+                    if (file) void analyse(file, { empno: e.target.value });
+                  }}
+                >
+                  <option value="">Choose&hellip;</option>
+                  {result.employees.map((e) => (
+                    <option key={e.empno} value={e.empno}>
+                      {e.name} ({e.empno})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div className="grid range" style={{ marginTop: 18 }}>
               <div>
-                <label htmlFor="from">From (optional)</label>
+                <label htmlFor="cutoff">Cut-off period</label>
+                <select
+                  id="cutoff"
+                  value={cutoffId}
+                  onChange={(e) => pickCutoff(e.target.value)}
+                >
+                  {cutoffs.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.label}
+                    </option>
+                  ))}
+                  <option value={FILE_RANGE}>Whatever the file covers</option>
+                  <option value={CUSTOM}>Custom&hellip;</option>
+                </select>
+              </div>
+              <div>
+                <label htmlFor="from">From</label>
                 <input
                   id="from"
-                  type="text"
-                  placeholder={fmtShort(result.rangeStart)}
+                  type="date"
                   value={from}
-                  onChange={(e) => setFrom(e.target.value)}
+                  max={to || undefined}
+                  onChange={(e) => {
+                    setFrom(e.target.value);
+                    setCutoffId(CUSTOM);
+                  }}
                 />
               </div>
               <div>
-                <label htmlFor="to">To (optional)</label>
+                <label htmlFor="to">To</label>
                 <input
                   id="to"
-                  type="text"
-                  placeholder={fmtShort(result.rangeEnd)}
+                  type="date"
                   value={to}
-                  onChange={(e) => setTo(e.target.value)}
+                  min={from || undefined}
+                  onChange={(e) => {
+                    setTo(e.target.value);
+                    setCutoffId(CUSTOM);
+                  }}
                 />
               </div>
               <div>
@@ -346,15 +411,16 @@ export default function Page() {
                 Also include days already flagged absent in the file
               </label>
               <div className="spacer" />
-              <button onClick={() => file && analyse(file)} disabled={busy || !file}>
-                {busy ? "Reading…" : "Re-scan"}
+              <button onClick={() => file && analyse(file)} disabled={scanning || !file}>
+                {scanning ? "Reading…" : "Re-scan"}
               </button>
             </div>
 
             <p className="hint">
               The scan looks for Mon&ndash;Fri dates with <em>no row at all</em> in
-              the file. If your export only ever lists absences, widen the range
-              or tick the box above.
+              the file. It opens on the cut-off you are currently filing for;
+              editing either date switches to Custom. If your export only ever
+              lists absences, tick the box above.
             </p>
           </>
         )}
@@ -513,9 +579,12 @@ export default function Page() {
             <button
               className="primary"
               onClick={generate}
-              disabled={busy || !chosen.length || incomplete > 0 || !position.trim()}
+              disabled={
+                rendering || scanning || !chosen.length || incomplete > 0 ||
+                !position.trim()
+              }
             >
-              {busy ? "Rendering…" : `Generate PDF (${chosen.length})`}
+              {rendering ? "Rendering…" : `Generate PDF (${chosen.length})`}
             </button>
             {incomplete > 0 && (
               <span style={{ color: "var(--muted)" }}>

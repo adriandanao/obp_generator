@@ -112,7 +112,11 @@ textarea { resize: vertical; min-height: 62px; }
 .grid { display: grid; gap: 14px; }
 .grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
 .grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
-@media (max-width: 800px) { .grid.cols-3, .grid.cols-4 { grid-template-columns: 1fr 1fr; } }
+/* the cut-off label is the longest control here, so give it the most room */
+.grid.range { grid-template-columns: 1.8fr 1fr 1fr 1.3fr; }
+@media (max-width: 860px) {
+  .grid.cols-3, .grid.cols-4, .grid.range { grid-template-columns: 1fr 1fr; }
+}
 
 button {
   font: inherit;
