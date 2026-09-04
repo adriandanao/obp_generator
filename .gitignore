@@ -1,0 +1,12 @@
+node_modules/
+.next/
+out/
+next-env.d.ts
+*.pdf
+.DS_Store
+.env*.local
+
+# python cli
+__pycache__/
+*.pyc
+obp_config.json
