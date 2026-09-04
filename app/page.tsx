@@ -90,7 +90,7 @@ export default function Page() {
     setPosition(d.position);
 
     const today = todayIso();
-    setSlipDate(fmtShort(today));
+    setSlipDate(today); // held as ISO for the picker, printed as dd-MMM-yy
     setCutoffs(cutoffsAround(today));
     const due = dueCutoff(today);
     if (due) {
@@ -214,7 +214,11 @@ export default function Page() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          header: { name: result.name, position, date: slipDate },
+          header: {
+            name: result.name,
+            position,
+            date: slipDate ? fmtShort(slipDate) : "",
+          },
           entries,
         }),
       });
@@ -408,7 +412,7 @@ export default function Page() {
                   checked={includeAbsent}
                   onChange={(e) => setIncludeAbsent(e.target.checked)}
                 />
-                Also include days already flagged absent in the file
+                Also include days flagged absent that <em>do</em> have clock-ins
               </label>
               <div className="spacer" />
               <button onClick={() => file && analyse(file)} disabled={scanning || !file}>
@@ -417,10 +421,10 @@ export default function Page() {
             </div>
 
             <p className="hint">
-              The scan looks for Mon&ndash;Fri dates with <em>no row at all</em> in
-              the file. It opens on the cut-off you are currently filing for;
-              editing either date switches to Custom. If your export only ever
-              lists absences, tick the box above.
+              A Mon&ndash;Fri date counts as missing when it has no row in the
+              file, or has a row the clock never registered &mdash; rest days,
+              holidays and leave are set aside. It opens on the cut-off you are
+              currently filing for; editing either date switches to Custom.
             </p>
           </>
         )}
@@ -568,7 +572,7 @@ export default function Page() {
               <label htmlFor="sdate">Date on the slip</label>
               <input
                 id="sdate"
-                type="text"
+                type="date"
                 value={slipDate}
                 onChange={(e) => setSlipDate(e.target.value)}
               />

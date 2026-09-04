@@ -118,6 +118,27 @@ def truthy(value):
         return True
 
 
+def has_punches(row):
+    """Did the clock register anything that day?
+
+    The exports carry up to 25 in/out pairs.  A day with no punch at all is a
+    day not worked - far more reliable than abs_flag, which some exports also
+    set on days that were plainly worked.
+    """
+    for i in range(1, 26):
+        if str(row.get(f"in{i}") or "").strip():
+            return True
+        if str(row.get(f"out{i}") or "").strip():
+            return True
+    return False
+
+
+def is_rest_day(row):
+    """Rest days show up as do_flag, or as an ss_code ending in 'DO'."""
+    ss = str(row.get("ss_code") or "").strip().upper()
+    return truthy(row.get("do_flag")) or ss.endswith("DO")
+
+
 def shift_times(text):
     """'HO/WARE (08:30 - 17:30)' -> ('08:30', '17:30')."""
     m = re.search(r"(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})", str(text or ""))
@@ -419,35 +440,48 @@ def collect_entries(missing, cfg, shift_in, shift_out):
 # Main
 # --------------------------------------------------------------------------
 def find_missing(rows, present, start, end, holidays, include_absent):
-    """Return (missing days, [(date, why-skipped)])."""
+    """Return (missing days, [(date, why-skipped)]).
+
+    A Mon-Fri date is missing when it has no row at all, or has a row the
+    clock never registered.  Weekends are never work days, so they are neither
+    offered nor reported whatever the row says.
+    """
+    by_date = {r["_date"]: r for r in rows}
     missing, skipped = [], []
 
     day = start
     while day <= end:
-        if day.weekday() < 5 and day not in present:
-            if day in holidays:
-                skipped.append((day, holidays[day]))
-            else:
-                missing.append(day)
-        day += dt.timedelta(days=1)
-
-    # Rows that ARE in the file but are non-working days: reported, never prompted.
-    for r in sorted(rows, key=lambda r: r["_date"]):
-        if not start <= r["_date"] <= end:
+        if day.weekday() >= 5:
+            day += dt.timedelta(days=1)
             continue
-        reasons = []
-        hol_name = str(r.get("hol_name") or "").strip()
-        if truthy(r.get("hol_flag")) or hol_name:
-            reasons.append(f"holiday {hol_name}".strip())
-        if truthy(r.get("do_flag")):
-            reasons.append("rest day")
-        if truthy(r.get("leave")) or truthy(r.get("lv_type")):
-            kind = str(r.get("lv_type") or r.get("leave") or "").strip()
-            reasons.append(f"leave {kind}".strip())
-        if reasons:
-            skipped.append((r["_date"], "in file: " + ", ".join(reasons)))
-        elif include_absent and truthy(r.get("abs_flag")):
-            missing.append(r["_date"])
+
+        if day in holidays:
+            skipped.append((day, holidays[day]))
+            day += dt.timedelta(days=1)
+            continue
+
+        r = by_date.get(day)
+        if r is None:
+            missing.append(day)                       # no row at all
+        else:
+            reasons = []
+            hol_name = str(r.get("hol_name") or "").strip()
+            if truthy(r.get("hol_flag")) or hol_name:
+                reasons.append(f"holiday {hol_name}".strip())
+            if is_rest_day(r):
+                reasons.append("rest day")
+            if truthy(r.get("leave")) or truthy(r.get("lv_type")):
+                kind = str(r.get("lv_type") or r.get("leave") or "").strip()
+                reasons.append(f"leave {kind}".strip())
+
+            if reasons:
+                skipped.append((day, "in file: " + ", ".join(reasons)))
+            elif not has_punches(r):
+                missing.append(day)                   # row exists, clock silent
+            elif include_absent and truthy(r.get("abs_flag")):
+                missing.append(day)                   # flagged absent, but clocked
+
+        day += dt.timedelta(days=1)
 
     return sorted(set(missing)), sorted(skipped)
 
@@ -466,7 +500,7 @@ def main(argv=None):
     ap.add_argument("--holidays", type=Path,
                     help="text file of holiday dates, one per line")
     ap.add_argument("--include-absent", action="store_true",
-                    help="also treat rows already flagged absent (abs_flag) "
+                    help="also treat days flagged absent that DO have clock-ins "
                          "as missing days")
     ap.add_argument("--dry-run", action="store_true",
                     help="report the missing days only; do not prompt or render")
@@ -495,9 +529,13 @@ def main(argv=None):
         ap.error("this export covers several employees; pass --emp with one of: "
                  + ", ".join(emps))
 
+    # Read identity off the whole sheet, not row 0: exports vary the spelling
+    # between rows ("DANAO, ADRIAN F" vs "DANAO, ADRIAN F.").
     empno = str(rows[0].get("empno", "")).strip()
-    name = pretty_name(rows[0].get("empname"))
-    shift_in, shift_out = shift_times(rows[0].get("shift"))
+    name = pretty_name(max((str(r.get("empname") or "").strip() for r in rows),
+                           key=len, default=""))
+    shift_in, shift_out = shift_times(
+        next((r.get("shift") for r in rows if str(r.get("shift") or "").strip()), ""))
 
     # --- the range ---------------------------------------------------------
     present = {r["_date"] for r in rows}

@@ -15,10 +15,17 @@ your defaults (position, usual From/To, personnel) live in `localStorage`.
 
 1. **Upload** — the export is read with SheetJS, which handles the old BIFF2
    `.XLS` these systems produce as well as modern `.xlsx`.
-2. **Scan** — every Mon–Fri date in the range that has *no row at all* is a
-   missing work day. Days that are holidays, rest days (`do_flag`) or approved
-   leave (`leave` / `lv_type`) are listed as skipped, never offered. The range
-   defaults to the cut-off period you are currently filing for (below).
+2. **Scan** — a Mon–Fri date is a missing work day when it has *no row at all*,
+   or has a row **the clock never registered** (no `in1…in25` / `out1…out25`).
+   Holidays, rest days and approved leave are listed as skipped, never offered.
+   Weekends are neither. The range defaults to the cut-off period you are
+   currently filing for (below).
+
+   Punches, not `abs_flag`, are the signal: the exports set `abs_flag` on days
+   that were plainly worked — clocked in at 07:54 and out at 18:02 — so trusting
+   it alone produces slips for days you were present. Rest days likewise show up
+   as an `ss_code` ending in `DO` rather than as `do_flag`. Tick **Also include
+   days flagged absent that do have clock-ins** to see those anomalies anyway.
 3. **Fill** — one row per missing day. *Copy first row down* propagates the
    first row's details to the rest, which is usually what you want.
 4. **Print** — four entries per slip, two identical copies per page separated
@@ -49,12 +56,9 @@ top of `lib/cutoff.ts`; everything else derives from them.
 
 ### If your export only lists absences
 
-Some exports contain *only* the absent days, in which case there are no gaps to
-find. Two ways out, both in the upload panel:
-
-- widen **From** / **To** to the full period you are filing for, or
-- tick **Also include days already flagged absent in the file** to use the
-  `abs_flag` rows instead.
+Some exports contain *only* the absent days. Those rows have no punches, so
+they are detected on their own — just make sure **From** / **To** cover the
+period you are filing for rather than only what the file happens to span.
 
 ## Layout
 

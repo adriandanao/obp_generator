@@ -16,6 +16,26 @@ export function truthy(value: unknown): boolean {
   return Number.isNaN(n) ? true : n !== 0;
 }
 
+/**
+ * Did the clock register anything that day?  The exports carry up to 25
+ * in/out pairs, and a day with no punch at all is a day not worked - a far
+ * more reliable signal than abs_flag, which some exports also set on days
+ * that were plainly worked.
+ */
+export function hasPunches(row: Record<string, unknown>): boolean {
+  for (let i = 1; i <= 25; i++) {
+    if (String(row[`in${i}`] ?? "").trim()) return true;
+    if (String(row[`out${i}`] ?? "").trim()) return true;
+  }
+  return false;
+}
+
+/** Rest days show up as do_flag, or as an ss_code ending in "DO". */
+export function isRestDay(row: Record<string, unknown>): boolean {
+  const ss = String(row.ss_code ?? "").trim().toUpperCase();
+  return truthy(row.do_flag) || ss.endsWith("DO");
+}
+
 /** "HO/WARE (08:30 - 17:30)" -> ["08:30", "17:30"] */
 export function shiftTimes(value: unknown): [string | null, string | null] {
   const m = /(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})/.exec(String(value ?? ""));
@@ -99,49 +119,62 @@ export function analyse(buf: Buffer, opts: ParseOptions = {}): ParseResult {
   if (start > end) throw new ParseError("The start date is after the end date.");
 
   const holidays = new Set(opts.holidays ?? []);
+  const byDate = new Map(rows.map((r) => [r._iso as string, r]));
   const missing: string[] = [];
   const skipped: DayNote[] = [];
+  const note = (iso: string, reason: string) =>
+    skipped.push({ iso, label: fmtLabel(iso), reason });
 
+  // One pass over the calendar. Weekends are never work days, so they are
+  // neither offered nor reported, whatever the row says.
   for (const iso of eachDay(start, end)) {
-    if (!isWeekday(iso) || present.has(iso)) continue;
-    if (holidays.has(iso)) {
-      skipped.push({ iso, label: fmtLabel(iso), reason: "holiday" });
-    } else {
-      missing.push(iso);
-    }
-  }
+    if (!isWeekday(iso)) continue;
 
-  // Rows that ARE in the file but are non-working days: reported, never offered.
-  for (const r of rows.sort((a, b) => (a._iso! < b._iso! ? -1 : 1))) {
-    const iso = r._iso as string;
-    if (iso < start || iso > end) continue;
+    if (holidays.has(iso)) {
+      note(iso, "holiday");
+      continue;
+    }
+
+    const r = byDate.get(iso);
+    if (!r) {
+      missing.push(iso); // no row at all
+      continue;
+    }
 
     const reasons: string[] = [];
     const holName = String(r.hol_name ?? "").trim();
     if (truthy(r.hol_flag) || holName) {
       reasons.push(holName ? `holiday - ${holName}` : "holiday");
     }
-    if (truthy(r.do_flag)) reasons.push("rest day");
+    if (isRestDay(r)) reasons.push("rest day");
     if (truthy(r.leave) || truthy(r.lv_type)) {
       const kind = String(r.lv_type || r.leave || "").trim();
       reasons.push(kind ? `leave - ${kind}` : "leave");
     }
 
     if (reasons.length) {
-      skipped.push({ iso, label: fmtLabel(iso), reason: reasons.join(", ") });
+      note(iso, reasons.join(", "));
+    } else if (!hasPunches(r)) {
+      missing.push(iso); // a row exists, but the clock recorded nothing
     } else if (opts.includeAbsent && truthy(r.abs_flag)) {
-      missing.push(iso);
+      missing.push(iso); // flagged absent even though it was clocked
     }
   }
 
   const uniqueMissing = [...new Set(missing)].sort();
   skipped.sort((a, b) => (a.iso < b.iso ? -1 : 1));
 
-  const [shiftIn, shiftOut] = shiftTimes(rows[0].shift);
+  // Read identity off the whole sheet, not row 0: exports vary the spelling
+  // between rows ("DANAO, ADRIAN F" vs "DANAO, ADRIAN F.").
+  const rawName = rows
+    .map((r) => String(r.empname ?? "").trim())
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length)[0];
+  const [shiftIn, shiftOut] = shiftTimes(rows.find((r) => String(r.shift ?? "").trim())?.shift);
 
   return {
     empno: String(rows[0].empno ?? "").trim(),
-    name: prettyName(rows[0].empname),
+    name: prettyName(rawName),
     shiftIn,
     shiftOut,
     rangeStart: start,
