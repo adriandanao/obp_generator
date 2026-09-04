@@ -5,7 +5,7 @@
  * operations the forms actually need - text optically centred in a box, text
  * that shrinks to fit a cell, and hairline rules.
  */
-import { PDFFont, PDFPage, rgb } from "pdf-lib";
+import { PDFFont, PDFImage, PDFPage, rgb } from "pdf-lib";
 
 export const BLACK = rgb(0, 0, 0);
 export const LINE_W = 0.5;
@@ -94,6 +94,26 @@ export function rule(
     thickness,
     color: BLACK,
     dashArray: dash,
+  });
+}
+
+/**
+ * A signature sitting on a ruled line: scaled to fit the box, centred over
+ * the rule, resting just above it so it reads as written on the line.
+ */
+export function drawSignature(
+  page: PDFPage, img: PDFImage,
+  left: number, right: number, ruleY: number, maxHeight: number,
+) {
+  const maxWidth = right - left;
+  const scale = Math.min(maxWidth / img.width, maxHeight / img.height);
+  const w = img.width * scale;
+  const h = img.height * scale;
+  page.drawImage(img, {
+    x: (left + right) / 2 - w / 2,
+    y: ruleY + 1,
+    width: w,
+    height: h,
   });
 }
 

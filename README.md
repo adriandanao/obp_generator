@@ -8,11 +8,27 @@ Two printable forms, one app:
 
 ```bash
 npm install
-npm run dev      # http://localhost:3000
+npm run dev      # http://localhost:3210
 ```
 
 No database, no accounts. Files are parsed in memory and never written to disk;
 your defaults live in `localStorage`.
+
+## Signatures
+
+Both forms take an optional signature for the **Prepared by** line — draw it
+with a mouse, trackpad or finger, or upload a photo of your signature on white
+paper. Uploads have their background keyed out to transparency and both paths
+are cropped to the ink, so it lands over the printed name the way wet ink
+would rather than as a white box.
+
+It is stored as a PNG data URL in `localStorage` and shared by both forms, so
+you capture it once. It never reaches a server except as part of the render
+request, and nothing is persisted server-side.
+
+**Noted by** and **Approved by** are deliberately left as blank ruled lines.
+Those signatures belong to whoever approves the request, and are not the
+app's to place.
 
 ## Official Business slips
 
@@ -124,11 +140,13 @@ app/
   api/parse/route.ts       POST an export -> employee, range, missing days
   api/pdf/route.ts         POST header + entries -> application/pdf
   api/leave-pdf/route.ts   POST a leave request -> application/pdf
+  signature.tsx            draw / upload a signature, shared by both forms
 lib/
   attendance.ts            reading the export, finding the gaps
   obp-pdf.ts               the OB slip renderer (measured)
   afl-pdf.ts               the leave form renderer (from a photo)
   pdf-text.ts              drawing primitives shared by both
+  signature.ts             validates an incoming signature PNG
   cutoff.ts                the payroll cut-off calendar
   dates.ts                 calendar helpers (UTC only, never local time)
 ```

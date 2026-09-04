@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { PDFDocument, PDFFont, PDFImage, PDFPage, StandardFonts } from "pdf-lib";
 
 import { fmtShort } from "./dates";
-import { baseline, centred, drawBlock, rule, text } from "./pdf-text";
+import { baseline, centred, drawBlock, drawSignature, rule, text } from "./pdf-text";
 import type { Entry, SlipHeader } from "./types";
 
 const PAGE_W = 612;
@@ -46,7 +46,14 @@ const SIZE_THEAD = 7;
 const SIZE_CELL = 8;
 const SIZE_SMALL = 6;
 
-type Resources = { regular: PDFFont; bold: PDFFont; logo: PDFImage | null };
+const SIG_MAX_H = 26; // signature box height above the 'Prepared by' rule
+
+type Resources = {
+  regular: PDFFont;
+  bold: PDFFont;
+  logo: PDFImage | null;
+  signature: PDFImage | null;
+};
 
 /**
  * The letterhead, read once from disk.  A missing file is a deployment
@@ -89,7 +96,7 @@ function drawField(
 function drawSlip(
   page: PDFPage, top: number, header: SlipHeader, entries: Entry[], res: Resources,
 ) {
-  const { regular, bold, logo } = res;
+  const { regular, bold, logo, signature } = res;
   const x0 = COLS[0];
   const xn = COLS[COLS.length - 1];
   const hdrBot = top - HDR_H;
@@ -162,6 +169,11 @@ function drawSlip(
   text(page, header.name.toUpperCase(), COLS[1], top + DY_PREPARED, regular, SIZE_FIELD);
   rule(page, COLS[1], top + DY_SIG_RULE, COLS[1] + 90.5, top + DY_SIG_RULE);
   rule(page, COLS[5], top + DY_SIG_RULE, COLS[5] + 110.0, top + DY_SIG_RULE);
+  // Only "Prepared by" is signed here; Noted/Approved stay blank for wet ink.
+  if (signature) {
+    drawSignature(page, signature, COLS[1], COLS[1] + 90.5,
+                  top + DY_SIG_RULE, SIG_MAX_H);
+  }
   for (const x of [COLS[1], COLS[5]]) {
     text(page, "SIGN OVER PRINTED NAME", x, top + DY_SIG1, regular, SIZE_SMALL);
     text(page, "(INDICATE DATE PREPARED)", x, top + DY_SIG2, regular, SIZE_SMALL);
@@ -178,6 +190,7 @@ function drawCutLine(page: PDFPage, font: PDFFont) {
 export async function renderSlips(
   header: SlipHeader,
   entries: Entry[],
+  signature: Uint8Array | null = null,
 ): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   doc.setTitle("Official Business Slip");
@@ -186,6 +199,7 @@ export async function renderSlips(
     regular: await doc.embedFont(StandardFonts.Helvetica),
     bold: await doc.embedFont(StandardFonts.HelveticaBold),
     logo: raw ? await doc.embedPng(raw) : null,
+    signature: signature ? await doc.embedPng(signature) : null,
   };
 
   const chunks: Entry[][] = [];

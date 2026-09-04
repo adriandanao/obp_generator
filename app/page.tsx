@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type Cutoff, cutoffsAround, dueCutoff } from "@/lib/cutoff";
 import { fmtShort, isoOf } from "@/lib/dates";
 import type { Entry, ParseResult } from "@/lib/types";
+import SignatureField, { loadSignature } from "./signature";
 
 type Draft = Entry & { include: boolean; label: string };
 
@@ -77,6 +78,7 @@ export default function Page() {
   const [cutoffId, setCutoffId] = useState<string>(FILE_RANGE);
 
   const [position, setPosition] = useState("");
+  const [signature, setSignature] = useState<string | null>(null);
   const [slipDate, setSlipDate] = useState("");
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -88,6 +90,8 @@ export default function Page() {
     const d = loadDefaults();
     defaultsRef.current = d;
     setPosition(d.position);
+
+    setSignature(loadSignature());
 
     const today = todayIso();
     setSlipDate(today); // held as ISO for the picker, printed as dd-MMM-yy
@@ -220,6 +224,7 @@ export default function Page() {
             date: slipDate ? fmtShort(slipDate) : "",
           },
           entries,
+          signature,
         }),
       });
       if (!res.ok) {
@@ -577,6 +582,11 @@ export default function Page() {
                 onChange={(e) => setSlipDate(e.target.value)}
               />
             </div>
+          </div>
+
+          <div style={{ marginTop: 18 }}>
+            <label>Signature (optional)</label>
+            <SignatureField value={signature} onChange={setSignature} />
           </div>
 
           <div className="row" style={{ marginTop: 18 }}>

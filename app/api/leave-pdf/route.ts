@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { renderLeaveForms } from "@/lib/afl-pdf";
+import { SignatureError, decodeSignature } from "@/lib/signature";
 import type { LeaveKind, LeavePeriod, LeaveRequest } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -63,8 +64,18 @@ export async function POST(req: Request) {
     periods,
   };
 
+  let signature: Uint8Array | null;
   try {
-    const bytes = await renderLeaveForms(request);
+    signature = decodeSignature((body as { signature?: unknown })?.signature);
+  } catch (err) {
+    if (err instanceof SignatureError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+    throw err;
+  }
+
+  try {
+    const bytes = await renderLeaveForms(request, signature);
     const slug = name.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "");
     const filename = `AFL-${slug || "leave"}-${periods[0].from}.pdf`;
     return new NextResponse(Buffer.from(bytes), {

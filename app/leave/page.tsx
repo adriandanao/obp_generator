@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { countWeekdays, fmtShort, isoOf } from "@/lib/dates";
 import type { LeaveKind, LeavePeriod } from "@/lib/types";
+import SignatureField, { loadSignature } from "../signature";
 
 const DEFAULTS_KEY = "obp-slips.leave.v1";
 
@@ -46,6 +47,7 @@ export default function LeavePage() {
   const [otherText, setOtherText] = useState("");
   const [recordUnder, setRecordUnder] = useState<"VL" | "SL">("VL");
   const [reason, setReason] = useState("");
+  const [signature, setSignature] = useState<string | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +57,8 @@ export default function LeavePage() {
     setName(s.name);
     setPosition(s.position);
     setDepartment(s.department);
+    setSignature(loadSignature());
+
     const today = todayIso();
     setDatePrepared(today);
     setRows([newRow(today)]);
@@ -104,6 +108,7 @@ export default function LeavePage() {
           recordUnder,
           reason,
           periods: rows.map((r) => ({ from: r.from, to: r.to, days: daysFor(r) })),
+          signature,
         }),
       });
       if (!res.ok) {
@@ -265,6 +270,11 @@ export default function LeavePage() {
         <label htmlFor="lreason">Reason / explanation for leave application</label>
         <textarea id="lreason" value={reason} onChange={(e) => setReason(e.target.value)}
                   placeholder="Left blank on the form if you'd rather write it in" />
+
+        <div style={{ marginTop: 18 }}>
+          <label>Signature (optional)</label>
+          <SignatureField value={signature} onChange={setSignature} />
+        </div>
 
         <div className="row" style={{ marginTop: 18 }}>
           <button className="primary" onClick={generate} disabled={busy || !valid}>

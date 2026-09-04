@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { renderSlips } from "@/lib/obp-pdf";
+import { SignatureError, decodeSignature } from "@/lib/signature";
 import type { Entry, PdfRequest, SlipHeader } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -53,8 +54,18 @@ export async function POST(req: Request) {
     );
   }
 
+  let signature: Uint8Array | null;
   try {
-    const bytes = await renderSlips(header, entries);
+    signature = decodeSignature((body as { signature?: unknown })?.signature);
+  } catch (err) {
+    if (err instanceof SignatureError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+    throw err;
+  }
+
+  try {
+    const bytes = await renderSlips(header, entries, signature);
     const slug = header.name.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "");
     const filename = `OBP-${slug || "slips"}-${entries[0].iso}.pdf`;
     return new NextResponse(Buffer.from(bytes), {

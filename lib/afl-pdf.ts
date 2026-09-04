@@ -11,10 +11,10 @@
  *
  * Two identical copies per page, split by the "=====" rule the form uses.
  */
-import { PDFDocument, PDFFont, PDFPage, StandardFonts } from "pdf-lib";
+import { PDFDocument, PDFFont, PDFImage, PDFPage, StandardFonts } from "pdf-lib";
 
 import { fmtShort } from "./dates";
-import { baseline, centred, drawBlock, rule, text } from "./pdf-text";
+import { centred, drawBlock, drawSignature, rule, text } from "./pdf-text";
 import type { LeaveKind, LeaveRequest } from "./types";
 
 const PAGE_W = 612;
@@ -59,6 +59,7 @@ const SIZE_SUBTITLE = 9.5;
 const SIZE_BODY = 9;
 const SIZE_CELL = 8;
 const BOX = 7;
+const SIG_MAX_H = 26; // signature box above the 'Prepared by' rule
 
 const LEFT_ROWS = [
   "Allowable Leave",
@@ -68,7 +69,7 @@ const LEFT_ROWS = [
   "Remaining leaves",
 ];
 
-type Fonts = { regular: PDFFont; bold: PDFFont };
+type Fonts = { regular: PDFFont; bold: PDFFont; signature?: PDFImage | null };
 
 /** "Label: <value>" on a ruled line running to `lineEnd`. */
 function field(
@@ -180,6 +181,10 @@ function drawForm(page: PDFPage, top: number, req: LeaveRequest, period: number,
   for (const [a, b] of [[X0, 210], [250, 390], [400, 540]]) {
     rule(page, a, top + DY_SIGN_RULE, b, top + DY_SIGN_RULE);
   }
+  // Only "Prepared by" is signed here; Noted/Approved stay blank for wet ink.
+  if (fonts.signature) {
+    drawSignature(page, fonts.signature, X0, 210, top + DY_SIGN_RULE, SIG_MAX_H);
+  }
 
   text(page, "Distribution:", X0, top + DY_DIST, fonts.regular, SIZE_BODY);
   ["201 File", "HRM", "Payroll"].forEach((line, i) => {
@@ -196,12 +201,16 @@ function drawSeparator(page: PDFPage, fonts: Fonts) {
 }
 
 /** One form per leave period, two identical copies per page. */
-export async function renderLeaveForms(req: LeaveRequest): Promise<Uint8Array> {
+export async function renderLeaveForms(
+  req: LeaveRequest,
+  signature: Uint8Array | null = null,
+): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   doc.setTitle("Application for Leave");
   const fonts: Fonts = {
     regular: await doc.embedFont(StandardFonts.Helvetica),
     bold: await doc.embedFont(StandardFonts.HelveticaBold),
+    signature: signature ? await doc.embedPng(signature) : null,
   };
 
   const count = Math.max(1, req.periods.length);

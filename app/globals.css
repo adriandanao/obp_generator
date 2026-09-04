@@ -199,5 +199,28 @@ table { min-width: 940px; }
 .note li { margin: 2px 0; }
 
 .hint { color: var(--muted); font-size: 12px; margin-top: 8px; }
+
+/* ---- signature ---- */
+.sig-pad {
+  width: 100%;
+  max-width: 420px;
+  height: 118px;
+  display: block;
+  border: 1.5px dashed var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+  cursor: crosshair;
+  touch-action: none;
+}
+.sig-preview img {
+  display: block;
+  max-width: 260px;
+  max-height: 80px;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
 .empty { color: var(--muted); padding: 8px 0; }
 .count { color: var(--ok); font-weight: 600; }

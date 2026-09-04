@@ -4,9 +4,9 @@
   "private": true,
   "description": "Find missing work days in a timekeeping export and produce printable Official Business Slips.",
   "scripts": {
-    "dev": "next dev -p 3000",
+    "dev": "next dev -p 3210",
     "build": "next build",
-    "start": "next start -p 3000",
+    "start": "next start -p 3210",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
