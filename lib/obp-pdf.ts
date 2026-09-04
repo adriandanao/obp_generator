@@ -7,7 +7,10 @@
  * table, so one slip can be stamped at any anchor on the page.  Output is
  * geometrically identical to the reference PDF - see scripts/verify-layout.mjs.
  */
-import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb } from "pdf-lib";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+import { PDFDocument, PDFFont, PDFImage, PDFPage, StandardFonts, rgb } from "pdf-lib";
 
 import { fmtShort } from "./dates";
 import type { Entry, SlipHeader } from "./types";
@@ -30,6 +33,12 @@ const DY_SIG_RULE = -170.0;
 const DY_SIG1 = -176.5; // "SIGN OVER PRINTED NAME"
 const DY_SIG2 = -185.0; // "(INDICATE DATE PREPARED)"
 
+// Letterhead logo, centred above the title on each copy.
+const LOGO_X = 206.9;
+const LOGO_W = 198.2;
+const LOGO_H = 46.0;
+const DY_LOGO = 46.0; // bottom edge of the logo
+
 const SIZE_TITLE = 9;
 const SIZE_FIELD = 8;
 const SIZE_THEAD = 7;
@@ -38,7 +47,24 @@ const SIZE_SMALL = 6;
 const LINE_W = 0.5;
 const BLACK = rgb(0, 0, 0);
 
-type Fonts = { regular: PDFFont; bold: PDFFont };
+type Resources = { regular: PDFFont; bold: PDFFont; logo: PDFImage | null };
+
+/**
+ * The letterhead, read once from disk.  A missing file is a deployment
+ * problem, not a reason to refuse the slip - warn and print without it.
+ */
+let logoBytes: Uint8Array | null | undefined;
+function loadLogo(): Uint8Array | null {
+  if (logoBytes === undefined) {
+    try {
+      logoBytes = new Uint8Array(readFileSync(join(process.cwd(), "assets", "logo.png")));
+    } catch (err) {
+      console.warn("obp-pdf: assets/logo.png missing, printing without it", err);
+      logoBytes = null;
+    }
+  }
+  return logoBytes;
+}
 
 // ---------------------------------------------------------------- text ----
 
@@ -161,14 +187,20 @@ function drawField(
 }
 
 function drawSlip(
-  page: PDFPage, top: number, header: SlipHeader, entries: Entry[], fonts: Fonts,
+  page: PDFPage, top: number, header: SlipHeader, entries: Entry[], res: Resources,
 ) {
-  const { regular, bold } = fonts;
+  const { regular, bold, logo } = res;
   const x0 = COLS[0];
   const xn = COLS[COLS.length - 1];
   const hdrBot = top - HDR_H;
   const bottom = hdrBot - ROWS_PER_SLIP * ROW_H;
   const split = top + DY_SPLIT;
+
+  if (logo) {
+    page.drawImage(logo, {
+      x: LOGO_X, y: top + DY_LOGO, width: LOGO_W, height: LOGO_H,
+    });
+  }
 
   centred(page, "OFFICIAL BUSINESS SLIP", 0, PAGE_W, top + DY_TITLE, bold, SIZE_TITLE);
 
@@ -248,9 +280,11 @@ export async function renderSlips(
 ): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   doc.setTitle("Official Business Slip");
-  const fonts: Fonts = {
+  const raw = loadLogo();
+  const res: Resources = {
     regular: await doc.embedFont(StandardFonts.Helvetica),
     bold: await doc.embedFont(StandardFonts.HelveticaBold),
+    logo: raw ? await doc.embedPng(raw) : null,
   };
 
   const chunks: Entry[][] = [];
@@ -261,8 +295,8 @@ export async function renderSlips(
 
   for (const chunk of chunks) {
     const page = doc.addPage([PAGE_W, PAGE_H]);
-    for (const top of SLIP_TOPS) drawSlip(page, top, header, chunk, fonts);
-    drawCutLine(page, fonts.regular);
+    for (const top of SLIP_TOPS) drawSlip(page, top, header, chunk, res);
+    drawCutLine(page, res.regular);
   }
 
   return doc.save();

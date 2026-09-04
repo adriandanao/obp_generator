@@ -31,18 +31,21 @@ becomes 08:30 / 17:30.
 
 Two per month, computed in `lib/cutoff.ts`:
 
-| Period | Filed |
+| Period | Filed on |
 | --- | --- |
-| 25th of the previous month → 10th | 20th of the month |
-| 11th → 24th | 5th of the next month |
+| 21st of the previous month → 5th | the 5th |
+| 6th → 20th | the 20th |
+
+A period's last day is also the day you file it, and that day counts as part of
+the period. They tile with no gaps: `… 6–20 | 21–5 | 6–20 …`
 
 The picker opens on the period you are currently filing for — the earliest one
 whose filing date has not yet passed — and sets the two date fields to match.
 Editing either date by hand switches the picker to **Custom**; **Whatever the
 file covers** falls back to the export's own first and last dates.
 
-If the calendar ever moves, change the four day-of-month numbers at the top of
-`lib/cutoff.ts`; everything else derives from them.
+If the calendar ever moves, change the two pairs of day-of-month numbers at the
+top of `lib/cutoff.ts`; everything else derives from them.
 
 ### If your export only lists absences
 

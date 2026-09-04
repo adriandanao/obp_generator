@@ -24,6 +24,7 @@ import sys
 from pathlib import Path
 
 from reportlab.lib.pagesizes import letter
+from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas as rl_canvas
 
@@ -48,6 +49,13 @@ DY_PREPARED = -167.9            # baseline of "Prepared by:" and the name
 DY_SIG_RULE = -170.0
 DY_SIG1 = -176.5                # "SIGN OVER PRINTED NAME"
 DY_SIG2 = -185.0                # "(INDICATE DATE PREPARED)"
+
+# Letterhead logo, centred above the title on each copy.
+LOGO_PATH = Path(__file__).resolve().parent.parent / "assets" / "logo.png"
+LOGO_X = 206.9
+LOGO_W = 198.2
+LOGO_H = 46.0
+DY_LOGO = 46.0                  # bottom edge of the logo
 
 F_TITLE = ("Helvetica-Bold", 9)
 F_FIELD = ("Helvetica", 8)
@@ -215,12 +223,24 @@ def draw_field(c, x, label, value, top):
            top + DY_FIELD_RULE)
 
 
+def draw_logo(c, top):
+    """The letterhead.  A missing file is not a reason to refuse the slip."""
+    if not LOGO_PATH.exists():
+        return
+    try:
+        c.drawImage(ImageReader(str(LOGO_PATH)), LOGO_X, top + DY_LOGO,
+                    width=LOGO_W, height=LOGO_H, mask="auto")
+    except Exception as exc:                   # noqa: BLE001 - printing wins
+        print(f"  ! could not draw the logo: {exc}")
+
+
 def draw_slip(c, top, header, entries):
     x0, xn = COLS[0], COLS[-1]
     hdr_bot = top - HDR_H
     bottom = hdr_bot - ROWS_PER_SLIP * ROW_H
     split = top + DY_SPLIT
 
+    draw_logo(c, top)
     c.setFont(*F_TITLE)
     c.drawCentredString(PAGE_W / 2.0, top + DY_TITLE, "OFFICIAL BUSINESS SLIP")
 

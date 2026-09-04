@@ -1,67 +1,58 @@
 /**
  * Payroll cut-off periods.
  *
- * Two per month:
- *   25th of the previous month -> 10th, filed on the 20th
- *   11th -> 24th,                       filed on the 5th of the next month
+ * Two per month, and a period's last day is also the day you file it:
+ *   21st of the previous month -> 5th, filed on the 5th
+ *   6th -> 20th,                       filed on the 20th
  *
- * Change the four day-of-month numbers below if the calendar ever moves; the
- * rest of the file derives everything from them.
+ * They tile with no gaps: ... 6-20 | 21-5 | 6-20 ...  Change the two pairs of
+ * day-of-month numbers below if the calendar ever moves; everything else here
+ * derives from them.
  */
 import { MONTHS, isoOf } from "./dates";
 
-const FIRST = { startDay: 25, endDay: 10, fileDay: 20 };
-const SECOND = { startDay: 11, endDay: 24, fileDay: 5 };
+const FIRST = { startDay: 21, endDay: 5 };
+const SECOND = { startDay: 6, endDay: 20 };
 
 export type Cutoff = {
-  /** Stable option value, e.g. "2026-08-11_2026-08-24". */
+  /** Stable option value, e.g. "2026-08-21_2026-09-05". */
   id: string;
   start: string;
+  /** Last day of the period - inclusive, and the day it is filed. */
   end: string;
+  /** Kept distinct from `end` so the two can be decoupled later. */
   fileBy: string;
-  /** "11 – 24 Aug 2026 · due 5 Sep" */
+  /** "21 Aug – 5 Sep 2026" */
   label: string;
 };
 
 const prevMonth = (y: number, m: number) =>
   m === 1 ? { y: y - 1, m: 12 } : { y, m: m - 1 };
-const nextMonth = (y: number, m: number) =>
-  m === 12 ? { y: y + 1, m: 1 } : { y, m: m + 1 };
 
-function span(start: string, end: string, fileBy: string): string {
+function span(start: string, end: string): string {
   const [sy, sm, sd] = start.split("-").map(Number);
   const [ey, em, ed] = end.split("-").map(Number);
-  const [, fm, fd] = fileBy.split("-").map(Number);
-  // Collapse "11 Aug – 24 Aug 2026" to "11 – 24 Aug 2026" within one month.
+  // Collapse "6 Sep – 20 Sep 2026" to "6 – 20 Sep 2026" within one month.
   const head =
     sy !== ey ? `${sd} ${MONTHS[sm - 1]} ${sy}`
     : sm === em ? `${sd}`
     : `${sd} ${MONTHS[sm - 1]}`;
-  return `${head} – ${ed} ${MONTHS[em - 1]} ${ey} · due ${fd} ${MONTHS[fm - 1]}`;
+  return `${head} – ${ed} ${MONTHS[em - 1]} ${ey}`;
 }
 
-function make(start: string, end: string, fileBy: string): Cutoff {
-  return { id: `${start}_${end}`, start, end, fileBy, label: span(start, end, fileBy) };
+function make(start: string, end: string): Cutoff {
+  return { id: `${start}_${end}`, start, end, fileBy: end, label: span(start, end) };
 }
 
-/** The period ending on the 10th of the given month. */
+/** The period ending on the 5th of the given month. */
 export function firstCutoff(y: number, m: number): Cutoff {
   const p = prevMonth(y, m);
-  return make(
-    isoOf(p.y, p.m, FIRST.startDay),
-    isoOf(y, m, FIRST.endDay),
-    isoOf(y, m, FIRST.fileDay),
-  );
+  return make(isoOf(p.y, p.m, FIRST.startDay), isoOf(y, m, FIRST.endDay));
 }
 
-/** The period ending on the 24th of the given month. */
+/** The period ending on the 20th of the given month. */
 export function secondCutoff(y: number, m: number): Cutoff {
-  const n = nextMonth(y, m);
-  return make(
-    isoOf(y, m, SECOND.startDay),
-    isoOf(y, m, SECOND.endDay),
-    isoOf(n.y, n.m, SECOND.fileDay),
-  );
+  return make(isoOf(y, m, SECOND.startDay), isoOf(y, m, SECOND.endDay));
 }
 
 /** Every cut-off from `back` months ago to `forward` months ahead, oldest first. */
