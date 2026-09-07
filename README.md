@@ -2,8 +2,8 @@
 
 Two printable forms, one app:
 
-- **Official Business** (`/`) — upload a timekeeping export, fill in what you
-  were doing on the days with no record, print the slips.
+- **Official Business** (`/`) — add the days you need slips for, by hand or by
+  uploading a timekeeping export to find the ones with no record.
 - **Application for Leave** (`/leave`) — HRM F015, one form per leave period.
 
 ```bash
@@ -52,7 +52,12 @@ app's to place.
 
 ## Official Business slips
 
-### How it works
+The export is **optional**. *Add a day* puts any date straight into the grid,
+which is what you need before a cut-off: the day you are filing for will only
+show up as missing once the export exists, which is usually too late. Adding
+days works with or without a file; re-scanning a file replaces the list.
+
+### How it works, with an export
 
 1. **Upload** — the export is read with SheetJS, which handles the old BIFF2
    `.XLS` these systems produce as well as modern `.xlsx`.

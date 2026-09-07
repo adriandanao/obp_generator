@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { type Cutoff, cutoffsAround, dueCutoff } from "@/lib/cutoff";
-import { fmtShort, isoOf } from "@/lib/dates";
+import { fmtLabel, fmtShort, isoOf } from "@/lib/dates";
 import type { Entry, ParseResult } from "@/lib/types";
 import { type Ready, autoDownload, toReady } from "./download";
 import DownloadPanel from "./download-panel";
@@ -12,6 +12,7 @@ import SignatureField, { loadSignature } from "./signature";
 type Draft = Entry & { include: boolean; label: string };
 
 type Defaults = {
+  name: string;
   position: string;
   from: string;
   to: string;
@@ -24,6 +25,7 @@ type Defaults = {
 const DEFAULTS_KEY = "obp-slips.defaults.v1";
 
 const EMPTY_DEFAULTS: Defaults = {
+  name: "",
   position: "",
   from: "Head Office",
   to: "",
@@ -79,7 +81,9 @@ export default function Page() {
   const [cutoffs, setCutoffs] = useState<Cutoff[]>([]);
   const [cutoffId, setCutoffId] = useState<string>(FILE_RANGE);
 
+  const [name, setName] = useState("");
   const [position, setPosition] = useState("");
+  const [newDay, setNewDay] = useState("");
   const [signature, setSignature] = useState<string | null>(null);
   const [ready, setReady] = useState<Ready | null>(null);
   const [slipDate, setSlipDate] = useState("");
@@ -92,12 +96,14 @@ export default function Page() {
   useEffect(() => {
     const d = loadDefaults();
     defaultsRef.current = d;
+    setName(d.name);
     setPosition(d.position);
 
     setSignature(loadSignature());
 
     const today = todayIso();
     setSlipDate(today); // held as ISO for the picker, printed as dd-MMM-yy
+    setNewDay(today);
     setCutoffs(cutoffsAround(today));
     const due = dueCutoff(today);
     if (due) {
@@ -126,6 +132,7 @@ export default function Page() {
         const parsed = data as ParseResult;
         setResult(parsed);
         if (!empno && parsed.employees.length === 1) setEmpno(parsed.empno);
+        setName(parsed.name);
         // Seed the pickers with the file's own range so there is something to
         // nudge, rather than two empty date fields.
         setFrom((v) => v || parsed.rangeStart);
@@ -190,6 +197,36 @@ export default function Page() {
     setRows((rs) => rs.map((r) => (r.iso === iso ? { ...r, ...patch } : r)));
   }
 
+  /**
+   * Add a day by hand. Needed before the cut-off, when the export that would
+   * flag the day as missing does not exist yet.
+   */
+  function addDay(iso: string) {
+    if (!iso) return;
+    setError(null);
+    if (rows.some((r) => r.iso === iso)) {
+      setError(`${fmtLabel(iso)} is already in the list.`);
+      return;
+    }
+    const d = defaultsRef.current;
+    setRows((rs) =>
+      [
+        ...rs,
+        {
+          iso,
+          label: fmtLabel(iso),
+          include: true,
+          from: d.from,
+          to: d.to,
+          purpose: d.purpose,
+          timeIn: d.timeIn || result?.shiftIn || "",
+          timeOut: d.timeOut || result?.shiftOut || "",
+          personnel: d.personnel,
+        },
+      ].sort((a, b) => (a.iso < b.iso ? -1 : 1)),
+    );
+  }
+
   /** Copy the first included row's details into every row below it. */
   function fillDown() {
     const first = rows.find((r) => r.include);
@@ -212,7 +249,6 @@ export default function Page() {
   }
 
   async function generate() {
-    if (!result) return;
     setRendering(true);
     setError(null);
     try {
@@ -222,7 +258,7 @@ export default function Page() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           header: {
-            name: result.name,
+            name: name.trim(),
             position,
             date: slipDate ? fmtShort(slipDate) : "",
           },
@@ -244,6 +280,7 @@ export default function Page() {
 
       const first = chosen[0];
       const saved: Defaults = {
+        name: name.trim(),
         position,
         from: first?.from ?? defaultsRef.current.from,
         to: first?.to ?? defaultsRef.current.to,
@@ -267,13 +304,13 @@ export default function Page() {
     <main>
       <h1>Official Business Slips</h1>
       <p className="sub">
-        Upload a timekeeping export, say what you were doing on the days with no
-        record, and print the slips.
+        Add the days you need slips for &mdash; by hand, or by uploading a
+        timekeeping export to find the ones with no record.
       </p>
 
       {/* ---------------------------------------------------------- upload */}
       <section className="panel">
-        <h2>1 &middot; Attendance export</h2>
+        <h2>1 &middot; Attendance export <span className="opt">optional</span></h2>
         <div
           className={`drop${over ? " over" : ""}`}
           onClick={() => inputRef.current?.click()}
@@ -439,11 +476,27 @@ export default function Page() {
       </section>
 
       {/* ------------------------------------------------------- the days */}
-      {result && (
-        <section className="panel">
-          <h2>2 &middot; Missing work days</h2>
+      <section className="panel">
+        <h2>2 &middot; Days to file</h2>
 
-          {result.skipped.length > 0 && (
+        <div className="row" style={{ marginBottom: 14 }}>
+          <label htmlFor="newday" style={{ margin: 0 }}>Add a day</label>
+          <input
+            id="newday"
+            type="date"
+            value={newDay}
+            style={{ maxWidth: 180 }}
+            onChange={(e) => setNewDay(e.target.value)}
+          />
+          <button onClick={() => addDay(newDay)} disabled={!newDay}>Add</button>
+          {result && (
+            <span className="hint" style={{ margin: 0 }}>
+              Re-scanning replaces this list.
+            </span>
+          )}
+        </div>
+
+        {result && result.skipped.length > 0 && (
             <div className="note" style={{ marginBottom: 16 }}>
               Skipped {result.skipped.length} day
               {result.skipped.length === 1 ? "" : "s"}:
@@ -457,11 +510,13 @@ export default function Page() {
             </div>
           )}
 
-          {rows.length === 0 ? (
-            <p className="empty">
-              No missing work days in this range. Try widening it above.
-            </p>
-          ) : (
+        {rows.length === 0 ? (
+          <p className="empty">
+            {result
+              ? "No missing work days in this range — widen it above, or add a day."
+              : "Add the day you need a slip for, or upload an export to find them."}
+          </p>
+        ) : (
             <>
               <div className="row" style={{ marginBottom: 12 }}>
                 <span className="count">
@@ -546,19 +601,24 @@ export default function Page() {
                   </tbody>
                 </table>
               </div>
-            </>
-          )}
-        </section>
-      )}
+          </>
+        )}
+      </section>
 
       {/* ----------------------------------------------------------- print */}
-      {result && rows.length > 0 && (
+      {rows.length > 0 && (
         <section className="panel">
           <h2>3 &middot; Print</h2>
           <div className="grid cols-3">
             <div>
               <label htmlFor="name">Name</label>
-              <input id="name" type="text" value={result.name} readOnly />
+              <input
+                id="name"
+                type="text"
+                value={name}
+                placeholder="Your full name"
+                onChange={(e) => setName(e.target.value)}
+              />
             </div>
             <div>
               <label htmlFor="pos">Position</label>
@@ -592,7 +652,7 @@ export default function Page() {
               onClick={generate}
               disabled={
                 rendering || scanning || !chosen.length || incomplete > 0 ||
-                !position.trim()
+                !position.trim() || !name.trim()
               }
             >
               {rendering ? "Rendering…" : `Generate PDF (${chosen.length})`}
@@ -603,8 +663,10 @@ export default function Page() {
                 need a purpose
               </span>
             )}
-            {!position.trim() && incomplete === 0 && (
-              <span style={{ color: "var(--muted)" }}>Add your position first</span>
+            {incomplete === 0 && (!position.trim() || !name.trim()) && (
+              <span style={{ color: "var(--muted)" }}>
+                Add your {!name.trim() ? "name" : "position"} first
+              </span>
             )}
           </div>
 
