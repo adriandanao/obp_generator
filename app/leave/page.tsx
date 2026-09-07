@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 
 import { countWeekdays, fmtShort, isoOf } from "@/lib/dates";
 import type { LeaveKind, LeavePeriod } from "@/lib/types";
+import { type Ready, autoDownload, toReady } from "../download";
+import DownloadPanel from "../download-panel";
 import SignatureField, { loadSignature } from "../signature";
 
 const DEFAULTS_KEY = "obp-slips.leave.v1";
@@ -48,6 +50,7 @@ export default function LeavePage() {
   const [recordUnder, setRecordUnder] = useState<"VL" | "SL">("VL");
   const [reason, setReason] = useState("");
   const [signature, setSignature] = useState<string | null>(null);
+  const [ready, setReady] = useState<Ready | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -116,17 +119,12 @@ export default function LeavePage() {
         throw new Error(data?.error ?? "Could not render the PDF.");
       }
 
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download =
-        res.headers.get("Content-Disposition")?.match(/filename="([^"]+)"/)?.[1] ??
-        "AFL.pdf";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      const next = await toReady(res, "AFL.pdf");
+      setReady((prev) => {
+        if (prev) URL.revokeObjectURL(prev.url);
+        return next;
+      });
+      autoDownload(next);
 
       try {
         window.localStorage.setItem(
@@ -284,6 +282,8 @@ export default function LeavePage() {
             <span style={{ color: "var(--muted)" }}>Add the employee name first</span>
           )}
         </div>
+
+        <DownloadPanel key={ready?.url ?? "none"} ready={ready} />
 
         {error && <div className="note err" style={{ marginTop: 16 }}>{error}</div>}
       </section>

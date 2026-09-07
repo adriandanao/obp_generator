@@ -14,6 +14,26 @@ npm run dev      # http://localhost:3210
 No database, no accounts. Files are parsed in memory and never written to disk;
 your defaults live in `localStorage`.
 
+## Getting the PDF out
+
+Generating shows a **Download** link plus, where the browser supports sharing
+files, **Save to Files**. On desktop the download also fires automatically;
+the visible link is the actual mechanism, not a fallback.
+
+That indirection is deliberate, because the usual "click a hidden anchor"
+trick fails on mobile Safari three separate ways:
+
+- the click lands *after* `await fetch(...)`, so the tap no longer counts as a
+  user activation and Safari navigates instead of downloading — the PDF opens
+  in a viewer tab with no way to save it;
+- revoking the object URL right after `click()` can pull it away before
+  Safari is done with it;
+- a blob typed `application/pdf` is claimed by Safari's built-in viewer.
+
+So the download blob is typed `application/octet-stream`, the URL lives until
+it is replaced, the automatic click is skipped on iOS, and the user gets a
+real link to tap. `app/download.ts` carries the detail.
+
 ## Signatures
 
 Both forms take an optional signature for the **Prepared by** line — draw it
@@ -141,6 +161,8 @@ app/
   api/pdf/route.ts         POST header + entries -> application/pdf
   api/leave-pdf/route.ts   POST a leave request -> application/pdf
   signature.tsx            draw / upload a signature, shared by both forms
+  download.ts              handing the PDF to the browser (mobile Safari quirks)
+  download-panel.tsx       the Download / Save to Files result panel
 lib/
   attendance.ts            reading the export, finding the gaps
   obp-pdf.ts               the OB slip renderer (measured)

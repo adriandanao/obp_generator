@@ -5,6 +5,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type Cutoff, cutoffsAround, dueCutoff } from "@/lib/cutoff";
 import { fmtShort, isoOf } from "@/lib/dates";
 import type { Entry, ParseResult } from "@/lib/types";
+import { type Ready, autoDownload, toReady } from "./download";
+import DownloadPanel from "./download-panel";
 import SignatureField, { loadSignature } from "./signature";
 
 type Draft = Entry & { include: boolean; label: string };
@@ -79,6 +81,7 @@ export default function Page() {
 
   const [position, setPosition] = useState("");
   const [signature, setSignature] = useState<string | null>(null);
+  const [ready, setReady] = useState<Ready | null>(null);
   const [slipDate, setSlipDate] = useState("");
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -232,21 +235,15 @@ export default function Page() {
         throw new Error(data?.error ?? "Could not render the PDF.");
       }
 
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download =
-        res.headers
-          .get("Content-Disposition")
-          ?.match(/filename="([^"]+)"/)?.[1] ?? "OBP.pdf";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      const next = await toReady(res, "OBP.pdf");
+      setReady((prev) => {
+        if (prev) URL.revokeObjectURL(prev.url);
+        return next;
+      });
+      autoDownload(next);
 
       const first = chosen[0];
-      const next: Defaults = {
+      const saved: Defaults = {
         position,
         from: first?.from ?? defaultsRef.current.from,
         to: first?.to ?? defaultsRef.current.to,
@@ -255,8 +252,8 @@ export default function Page() {
         timeOut: first?.timeOut ?? defaultsRef.current.timeOut,
         personnel: first?.personnel ?? defaultsRef.current.personnel,
       };
-      defaultsRef.current = next;
-      saveDefaults(next);
+      defaultsRef.current = saved;
+      saveDefaults(saved);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -610,6 +607,8 @@ export default function Page() {
               <span style={{ color: "var(--muted)" }}>Add your position first</span>
             )}
           </div>
+
+          <DownloadPanel key={ready?.url ?? "none"} ready={ready} />
         </section>
       )}
     </main>

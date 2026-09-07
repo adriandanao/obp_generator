@@ -162,6 +162,43 @@ button.link {
   padding: 2px 4px; text-decoration: underline;
 }
 
+/* an <a> that has to look and size like a button */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  font: inherit;
+  padding: 8px 14px;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  text-decoration: none;
+  cursor: pointer;
+}
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+.btn.primary:hover { filter: brightness(1.08); }
+
+/* ---- finished download ---- */
+.ready {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--ok) 45%, var(--line));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--ok) 8%, transparent);
+}
+.ready-head { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+.ready-head .tick {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--ok); color: var(--panel); font-size: 12px; font-weight: 700;
+}
+.ready .hint { margin-bottom: 0; }
+
 .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .choice {
   display: flex; align-items: center; gap: 6px;
