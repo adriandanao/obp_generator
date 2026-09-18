@@ -187,10 +187,14 @@ function drawCutLine(page: PDFPage, font: PDFFont) {
 }
 
 /**
- * Four entries per slip. Two identical copies per page by default - original
- * and duplicate, split by the "cut here" line. With `copies: 1` only the top
- * slip is drawn and the cut line is dropped, since there is no duplicate to
- * cut away.
+ * Four entries per slip, and two slip-sized halves per page.
+ *
+ * With `copies: 2` each page carries the same slip twice - original and
+ * duplicate - split by the "cut here" line.
+ *
+ * With `copies: 1` the halves carry *different* slips, so a page holds eight
+ * entries instead of four and nothing is wasted. The cut line is drawn only
+ * when the lower half is used, because otherwise there is nothing to cut.
  */
 export async function renderSlips(
   header: SlipHeader,
@@ -214,11 +218,20 @@ export async function renderSlips(
   }
   if (!chunks.length) chunks.push([]);
 
-  const tops = copies === 1 ? SLIP_TOPS.slice(0, 1) : SLIP_TOPS;
-  for (const chunk of chunks) {
+  if (copies === 2) {
+    for (const chunk of chunks) {
+      const page = doc.addPage([PAGE_W, PAGE_H]);
+      for (const top of SLIP_TOPS) drawSlip(page, top, header, chunk, res);
+      drawCutLine(page, res.regular);
+    }
+    return doc.save();
+  }
+
+  for (let i = 0; i < chunks.length; i += SLIP_TOPS.length) {
     const page = doc.addPage([PAGE_W, PAGE_H]);
-    for (const top of tops) drawSlip(page, top, header, chunk, res);
-    if (copies === 2) drawCutLine(page, res.regular);
+    const onPage = chunks.slice(i, i + SLIP_TOPS.length);
+    onPage.forEach((chunk, half) => drawSlip(page, SLIP_TOPS[half], header, chunk, res));
+    if (onPage.length > 1) drawCutLine(page, res.regular);
   }
 
   return doc.save();

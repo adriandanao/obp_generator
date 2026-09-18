@@ -61,6 +61,10 @@ function todayIso() {
   return isoOf(n.getFullYear(), n.getMonth() + 1, n.getDate());
 }
 
+/** Mirrors the renderer: 4 entries per slip, 2 slip-sized halves per page. */
+const ROWS_PER_SLIP = 4;
+const SLIPS_PER_PAGE = 2;
+
 /** Sentinel option values for the cut-off picker. */
 const FILE_RANGE = "file";
 const CUSTOM = "custom";
@@ -306,7 +310,9 @@ export default function Page() {
     }
   }
 
-  const pages = Math.max(1, Math.ceil(chosen.length / 4));
+  // One copy each puts a different slip in each half, so a page holds eight.
+  const slips = Math.max(1, Math.ceil(chosen.length / ROWS_PER_SLIP));
+  const pages = singleCopy ? Math.ceil(slips / SLIPS_PER_PAGE) : slips;
 
   return (
     <main>
@@ -532,7 +538,7 @@ export default function Page() {
                 </span>
                 <span style={{ color: "var(--muted)" }}>
                   &rarr; {pages} page{pages === 1 ? "" : "s"},{" "}
-                  {singleCopy ? "1 copy" : "2 copies"} each
+                  {singleCopy ? "no duplicates" : "2 copies each"}
                 </span>
                 <div className="spacer" />
                 <button onClick={fillDown} disabled={!chosen.length}>
@@ -657,7 +663,7 @@ export default function Page() {
                 checked={singleCopy}
                 onChange={(e) => setSingleCopy(e.target.checked)}
               />
-              Print one copy per page &mdash; no duplicate, no cut line
+              Print one copy of each slip &mdash; fills both halves, 8 days a page
             </label>
           </div>
 

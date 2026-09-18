@@ -360,24 +360,38 @@ def draw_cut_line(c):
 
 
 def render_pdf(out_path, header, entries, copies=2):
-    """Two identical copies per page by default.
+    """Four entries per slip, two slip-sized halves per page.
 
-    With copies=1 only the top slip is drawn and the cut line is dropped,
-    since there is no duplicate to cut away.
+    copies=2 puts the same slip in both halves - original and duplicate.
+    copies=1 puts *different* slips in them, so a page holds eight entries
+    and nothing is wasted; the cut line is drawn only when the lower half is
+    used, because otherwise there is nothing to cut.
     """
     c = rl_canvas.Canvas(str(out_path), pagesize=letter)
     c.setTitle("Official Business Slip")
-    pages = [entries[i:i + ROWS_PER_SLIP]
-             for i in range(0, len(entries), ROWS_PER_SLIP)] or [[]]
-    tops = SLIP_TOPS if copies == 2 else SLIP_TOPS[:1]
-    for chunk in pages:
-        for top in tops:
+    chunks = [entries[i:i + ROWS_PER_SLIP]
+              for i in range(0, len(entries), ROWS_PER_SLIP)] or [[]]
+
+    if copies == 2:
+        for chunk in chunks:
+            for top in SLIP_TOPS:
+                draw_slip(c, top, header, chunk)
+            draw_cut_line(c)
+            c.showPage()
+        c.save()
+        return len(chunks)
+
+    pages = 0
+    for i in range(0, len(chunks), len(SLIP_TOPS)):
+        on_page = chunks[i:i + len(SLIP_TOPS)]
+        for top, chunk in zip(SLIP_TOPS, on_page):
             draw_slip(c, top, header, chunk)
-        if copies == 2:
+        if len(on_page) > 1:
             draw_cut_line(c)
         c.showPage()
+        pages += 1
     c.save()
-    return len(pages)
+    return pages
 
 
 # --------------------------------------------------------------------------
@@ -545,7 +559,8 @@ def main(argv=None):
                     help="also treat days flagged absent that DO have clock-ins "
                          "as missing days")
     ap.add_argument("--copies", type=int, choices=(1, 2), default=2,
-                    help="copies per page: 2 (original + duplicate, default) or 1")
+                    help="2 = original + duplicate per page (default); "
+                         "1 = no duplicates, two different slips per page")
     ap.add_argument("--dry-run", action="store_true",
                     help="report the missing days only; do not prompt or render")
     args = ap.parse_args(argv)
@@ -659,7 +674,7 @@ def main(argv=None):
     header = {"name": name, "position": cfg["position"], "date": slip_date}
     pages = render_pdf(out, header, entries, args.copies)
     noun = "entry" if len(entries) == 1 else "entries"
-    copy_note = "1 copy" if args.copies == 1 else "2 copies"
+    copy_note = "no duplicates" if args.copies == 1 else "2 copies per page"
     print(f"\n  Wrote {out}  ({len(entries)} {noun}, {pages} "
           f"page{'' if pages == 1 else 's'}, {copy_note} per page)\n")
     return 0
