@@ -54,6 +54,9 @@ export async function POST(req: Request) {
     );
   }
 
+  // Only 1 or 2 are meaningful; anything else falls back to the norm.
+  const copies = (body as { copies?: unknown })?.copies === 1 ? 1 : 2;
+
   let signature: Uint8Array | null;
   try {
     signature = decodeSignature((body as { signature?: unknown })?.signature);
@@ -65,7 +68,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const bytes = await renderSlips(header, entries, signature);
+    const bytes = await renderSlips(header, entries, signature, copies);
     const slug = header.name.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "");
     const filename = `OBP-${slug || "slips"}-${entries[0].iso}.pdf`;
     return new NextResponse(Buffer.from(bytes), {

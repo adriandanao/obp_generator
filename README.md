@@ -75,7 +75,9 @@ days works with or without a file; re-scanning a file replaces the list.
 3. **Fill** — one row per missing day. *Copy first row down* propagates the
    first row's details to the rest, which is usually what you want.
 4. **Print** — four entries per slip, two identical copies per page separated
-   by the "cut here" line, extra pages as needed.
+   by the "cut here" line, extra pages as needed. Tick **Print one copy per
+   page** if you don't need the duplicate; the cut line goes with it, since
+   there is nothing to cut away. The choice is remembered.
 
 Time In / Time Out are filled in from the most specific source available, in
 this order:
@@ -197,6 +199,7 @@ remembering your answers in `obp_config.json`. It needs `reportlab`, plus
 ```bash
 python cli/obp_slips.py AD-09-04-26.XLS --dry-run
 python cli/obp_slips.py AD-09-04-26.XLS --from 01-Aug-26 --to 31-Aug-26
+python cli/obp_slips.py AD-09-04-26.XLS --copies 1      # skip the duplicate
 ```
 
 It renders through reportlab rather than pdf-lib, so its output is verified

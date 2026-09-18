@@ -186,11 +186,17 @@ function drawCutLine(page: PDFPage, font: PDFFont) {
   centred(page, "cut here", 0, PAGE_W, CUT_Y - 2.0, font, SIZE_SMALL);
 }
 
-/** Four entries per slip; two identical copies per page. */
+/**
+ * Four entries per slip. Two identical copies per page by default - original
+ * and duplicate, split by the "cut here" line. With `copies: 1` only the top
+ * slip is drawn and the cut line is dropped, since there is no duplicate to
+ * cut away.
+ */
 export async function renderSlips(
   header: SlipHeader,
   entries: Entry[],
   signature: Uint8Array | null = null,
+  copies: 1 | 2 = 2,
 ): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   doc.setTitle("Official Business Slip");
@@ -208,10 +214,11 @@ export async function renderSlips(
   }
   if (!chunks.length) chunks.push([]);
 
+  const tops = copies === 1 ? SLIP_TOPS.slice(0, 1) : SLIP_TOPS;
   for (const chunk of chunks) {
     const page = doc.addPage([PAGE_W, PAGE_H]);
-    for (const top of SLIP_TOPS) drawSlip(page, top, header, chunk, res);
-    drawCutLine(page, res.regular);
+    for (const top of tops) drawSlip(page, top, header, chunk, res);
+    if (copies === 2) drawCutLine(page, res.regular);
   }
 
   return doc.save();

@@ -359,15 +359,22 @@ def draw_cut_line(c):
     c.drawCentredString(PAGE_W / 2.0, CUT_Y - 2.0, "cut here")
 
 
-def render_pdf(out_path, header, entries):
+def render_pdf(out_path, header, entries, copies=2):
+    """Two identical copies per page by default.
+
+    With copies=1 only the top slip is drawn and the cut line is dropped,
+    since there is no duplicate to cut away.
+    """
     c = rl_canvas.Canvas(str(out_path), pagesize=letter)
     c.setTitle("Official Business Slip")
     pages = [entries[i:i + ROWS_PER_SLIP]
              for i in range(0, len(entries), ROWS_PER_SLIP)] or [[]]
+    tops = SLIP_TOPS if copies == 2 else SLIP_TOPS[:1]
     for chunk in pages:
-        for top in SLIP_TOPS:
+        for top in tops:
             draw_slip(c, top, header, chunk)
-        draw_cut_line(c)
+        if copies == 2:
+            draw_cut_line(c)
         c.showPage()
     c.save()
     return len(pages)
@@ -537,6 +544,8 @@ def main(argv=None):
     ap.add_argument("--include-absent", action="store_true",
                     help="also treat days flagged absent that DO have clock-ins "
                          "as missing days")
+    ap.add_argument("--copies", type=int, choices=(1, 2), default=2,
+                    help="copies per page: 2 (original + duplicate, default) or 1")
     ap.add_argument("--dry-run", action="store_true",
                     help="report the missing days only; do not prompt or render")
     args = ap.parse_args(argv)
@@ -648,10 +657,11 @@ def main(argv=None):
     out = args.output or args.input.with_name(
         f"OBP_{empno or 'slips'}_{start:%Y%m%d}-{end:%Y%m%d}.pdf")
     header = {"name": name, "position": cfg["position"], "date": slip_date}
-    pages = render_pdf(out, header, entries)
+    pages = render_pdf(out, header, entries, args.copies)
     noun = "entry" if len(entries) == 1 else "entries"
+    copy_note = "1 copy" if args.copies == 1 else "2 copies"
     print(f"\n  Wrote {out}  ({len(entries)} {noun}, {pages} "
-          f"page{'' if pages == 1 else 's'}, 2 copies per page)\n")
+          f"page{'' if pages == 1 else 's'}, {copy_note} per page)\n")
     return 0
 
 

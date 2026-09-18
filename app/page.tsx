@@ -14,6 +14,7 @@ type Draft = Entry & { include: boolean; label: string };
 type Defaults = {
   name: string;
   position: string;
+  singleCopy: boolean;
   from: string;
   to: string;
   purpose: string;
@@ -27,6 +28,7 @@ const DEFAULTS_KEY = "obp-slips.defaults.v1";
 const EMPTY_DEFAULTS: Defaults = {
   name: "",
   position: "",
+  singleCopy: false,
   from: "Head Office",
   to: "",
   purpose: "",
@@ -84,6 +86,7 @@ export default function Page() {
   const [name, setName] = useState("");
   const [position, setPosition] = useState("");
   const [newDay, setNewDay] = useState("");
+  const [singleCopy, setSingleCopy] = useState(false);
   const [signature, setSignature] = useState<string | null>(null);
   const [ready, setReady] = useState<Ready | null>(null);
   const [slipDate, setSlipDate] = useState("");
@@ -98,6 +101,7 @@ export default function Page() {
     defaultsRef.current = d;
     setName(d.name);
     setPosition(d.position);
+    setSingleCopy(d.singleCopy);
 
     setSignature(loadSignature());
 
@@ -266,6 +270,7 @@ export default function Page() {
           },
           entries,
           signature,
+          copies: singleCopy ? 1 : 2,
         }),
       });
       if (!res.ok) {
@@ -284,6 +289,7 @@ export default function Page() {
       const saved: Defaults = {
         name: name.trim(),
         position,
+        singleCopy,
         from: first?.from ?? defaultsRef.current.from,
         to: first?.to ?? defaultsRef.current.to,
         purpose: first?.purpose ?? defaultsRef.current.purpose,
@@ -525,7 +531,8 @@ export default function Page() {
                   {chosen.length} of {rows.length} selected
                 </span>
                 <span style={{ color: "var(--muted)" }}>
-                  &rarr; {pages} page{pages === 1 ? "" : "s"}, 2 copies each
+                  &rarr; {pages} page{pages === 1 ? "" : "s"},{" "}
+                  {singleCopy ? "1 copy" : "2 copies"} each
                 </span>
                 <div className="spacer" />
                 <button onClick={fillDown} disabled={!chosen.length}>
@@ -641,6 +648,17 @@ export default function Page() {
                 onChange={(e) => setSlipDate(e.target.value)}
               />
             </div>
+          </div>
+
+          <div className="row" style={{ marginTop: 16 }}>
+            <label style={{ margin: 0, display: "flex", gap: 7, alignItems: "center" }}>
+              <input
+                type="checkbox"
+                checked={singleCopy}
+                onChange={(e) => setSingleCopy(e.target.checked)}
+              />
+              Print one copy per page &mdash; no duplicate, no cut line
+            </label>
           </div>
 
           <div style={{ marginTop: 18 }}>
