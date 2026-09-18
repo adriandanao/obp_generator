@@ -147,8 +147,10 @@ export default function Page() {
             from: d.from,
             to: d.to,
             purpose: d.purpose,
-            timeIn: d.timeIn || parsed.shiftIn || "",
-            timeOut: d.timeOut || parsed.shiftOut || "",
+            // the clock is the most specific evidence, then your last
+            // answer, then the shift string
+            timeIn: m.timeIn || d.timeIn || parsed.shiftIn || "",
+            timeOut: m.timeOut || d.timeOut || parsed.shiftOut || "",
             personnel: d.personnel,
           })),
         );

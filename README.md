@@ -77,8 +77,17 @@ days works with or without a file; re-scanning a file replaces the list.
 4. **Print** — four entries per slip, two identical copies per page separated
    by the "cut here" line, extra pages as needed.
 
-Time In / Time Out are seeded from the `shift` column: `HO/WARE (08:30 - 17:30)`
-becomes 08:30 / 17:30.
+Time In / Time Out are filled in from the most specific source available, in
+this order:
+
+1. **the clock** — the day's first `in` and last `out`, e.g. `0758` → `07:58`.
+   Only days that were punched have these, which in practice means the
+   flagged-absent-but-clocked rows;
+2. **your last answer**, remembered from the previous run;
+3. **the `shift` column** — `HO/WARE (08:30 - 17:30)` → 08:30 / 17:30.
+
+Either time can arrive on its own: a day clocked in but never out fills Time
+In and leaves Time Out for you.
 
 ### Cut-off periods
 

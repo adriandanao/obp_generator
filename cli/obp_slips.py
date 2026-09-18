@@ -118,19 +118,45 @@ def truthy(value):
         return True
 
 
+def fmt_punch(value):
+    """'0758' -> '07:58'.  Anything unrecognised passes through untouched."""
+    s = str(value or "").strip()
+    if not s:
+        return ""
+    if re.fullmatch(r"\d{1,2}:\d{2}", s):
+        return s.zfill(5)
+    digits = re.sub(r"\D", "", s)
+    if len(digits) == 4:
+        return f"{digits[:2]}:{digits[2:]}"
+    if len(digits) == 3:
+        return f"0{digits[0]}:{digits[1:]}"
+    return s
+
+
+def punch_window(row):
+    """The day's span per the clock: first in, last out across 25 pairs.
+
+    Either can be blank on its own - a day clocked in but never out is exactly
+    the case an OB slip explains.
+    """
+    time_in = time_out = ""
+    for i in range(1, 26):
+        a = fmt_punch(row.get(f"in{i}"))
+        if a and not time_in:
+            time_in = a
+        b = fmt_punch(row.get(f"out{i}"))
+        if b:
+            time_out = b
+    return time_in, time_out
+
+
 def has_punches(row):
     """Did the clock register anything that day?
 
-    The exports carry up to 25 in/out pairs.  A day with no punch at all is a
-    day not worked - far more reliable than abs_flag, which some exports also
-    set on days that were plainly worked.
+    A day with no punch at all is a day not worked - far more reliable than
+    abs_flag, which some exports also set on days that were plainly worked.
     """
-    for i in range(1, 26):
-        if str(row.get(f"in{i}") or "").strip():
-            return True
-        if str(row.get(f"out{i}") or "").strip():
-            return True
-    return False
+    return any(punch_window(row))
 
 
 def is_rest_day(row):
@@ -398,7 +424,7 @@ def ask(label, default, required=False):
         print("      (required)")
 
 
-def collect_entries(missing, cfg, shift_in, shift_out):
+def collect_entries(missing, cfg, shift_in, shift_out, punches=None):
     if not cfg.get("time_in"):
         cfg["time_in"] = shift_in or ""
     if not cfg.get("time_out"):
@@ -420,17 +446,25 @@ def collect_entries(missing, cfg, shift_in, shift_out):
                            for d in missing[i - 1:])
             print("    -- stopping\n")
             break
+        clock_in, clock_out = punches.get(day, ("", ""))
         entry = {
             "date": fmt_date(day),
             "from": origin,
             "to": ask("To", cfg["to"]),
             "purpose": ask("Purpose", cfg["purpose"], required=True),
-            "time_in": ask("Time In", cfg["time_in"]),
-            "time_out": ask("Time Out", cfg["time_out"]),
+            "time_in": ask("Time In", clock_in or cfg["time_in"]),
+            "time_out": ask("Time Out", clock_out or cfg["time_out"]),
             "personnel": ask("Personnel", cfg["personnel"]),
         }
         entries.append(entry)
-        for key in ("from", "to", "purpose", "time_in", "time_out", "personnel"):
+        # A one-off punch time should not become the default for every later
+        # day, so only remember times the clock did not supply.
+        remember = ["from", "to", "purpose", "personnel"]
+        if not clock_in:
+            remember.append("time_in")
+        if not clock_out:
+            remember.append("time_out")
+        for key in remember:
             cfg[key] = entry[key]
         print()
     return entries, skipped
@@ -447,7 +481,7 @@ def find_missing(rows, present, start, end, holidays, include_absent):
     offered nor reported whatever the row says.
     """
     by_date = {r["_date"]: r for r in rows}
-    missing, skipped = [], []
+    missing, skipped, punches = [], [], {}
 
     day = start
     while day <= end:
@@ -480,10 +514,11 @@ def find_missing(rows, present, start, end, holidays, include_absent):
                 missing.append(day)                   # row exists, clock silent
             elif include_absent and truthy(r.get("abs_flag")):
                 missing.append(day)                   # flagged absent, but clocked
+                punches[day] = punch_window(r)
 
         day += dt.timedelta(days=1)
 
-    return sorted(set(missing)), sorted(skipped)
+    return sorted(set(missing)), sorted(skipped), punches
 
 
 def main(argv=None):
@@ -566,8 +601,8 @@ def main(argv=None):
             else:
                 print(f"  ! unparsed holiday line: {line!r}")
 
-    missing, skipped = find_missing(rows, present, start, end, holidays,
-                                    args.include_absent)
+    missing, skipped, punches = find_missing(rows, present, start, end, holidays,
+                                             args.include_absent)
 
     print(f"\n  Employee : {name} ({empno})")
     print(f"  Range    : {fmt_date(start)} .. {fmt_date(end)}")
@@ -598,7 +633,8 @@ def main(argv=None):
     cfg["position"] = ask("Position", cfg.get("position"), required=True)
     slip_date = ask("Slip date", fmt_date(dt.date.today()))
 
-    entries, more_skipped = collect_entries(missing, cfg, shift_in, shift_out)
+    entries, more_skipped = collect_entries(missing, cfg, shift_in, shift_out,
+                                            punches)
     save_config(cfg)
 
     if more_skipped:

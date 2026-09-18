@@ -16,18 +16,45 @@ export function truthy(value: unknown): boolean {
   return Number.isNaN(n) ? true : n !== 0;
 }
 
+/** "0758" -> "07:58". Anything unrecognised is passed through untouched. */
+function fmtPunch(value: unknown): string {
+  const s = String(value ?? "").trim();
+  if (!s) return "";
+  if (/^\d{1,2}:\d{2}$/.test(s)) return s.length === 4 ? `0${s}` : s;
+  const digits = s.replace(/\D/g, "");
+  if (digits.length === 4) return `${digits.slice(0, 2)}:${digits.slice(2)}`;
+  if (digits.length === 3) return `0${digits[0]}:${digits.slice(1)}`;
+  return s;
+}
+
 /**
- * Did the clock register anything that day?  The exports carry up to 25
- * in/out pairs, and a day with no punch at all is a day not worked - a far
- * more reliable signal than abs_flag, which some exports also set on days
- * that were plainly worked.
+ * The day's span according to the clock: the first in and the last out across
+ * the export's 25 in/out pairs.  Either can be blank on its own - a day where
+ * someone clocked in and never out is exactly the case an OB slip explains.
+ */
+export function punchWindow(row: Record<string, unknown>): {
+  timeIn: string;
+  timeOut: string;
+} {
+  let timeIn = "";
+  let timeOut = "";
+  for (let i = 1; i <= 25; i++) {
+    const a = fmtPunch(row[`in${i}`]);
+    if (a && !timeIn) timeIn = a;
+    const b = fmtPunch(row[`out${i}`]);
+    if (b) timeOut = b;
+  }
+  return { timeIn, timeOut };
+}
+
+/**
+ * Did the clock register anything that day?  A day with no punch at all is a
+ * day not worked - a far more reliable signal than abs_flag, which some
+ * exports also set on days that were plainly worked.
  */
 export function hasPunches(row: Record<string, unknown>): boolean {
-  for (let i = 1; i <= 25; i++) {
-    if (String(row[`in${i}`] ?? "").trim()) return true;
-    if (String(row[`out${i}`] ?? "").trim()) return true;
-  }
-  return false;
+  const { timeIn, timeOut } = punchWindow(row);
+  return Boolean(timeIn || timeOut);
 }
 
 /** Rest days show up as do_flag, or as an ss_code ending in "DO". */
@@ -120,7 +147,8 @@ export function analyse(buf: Buffer, opts: ParseOptions = {}): ParseResult {
 
   const holidays = new Set(opts.holidays ?? []);
   const byDate = new Map(rows.map((r) => [r._iso as string, r]));
-  const missing: string[] = [];
+  const missing: { iso: string; timeIn: string; timeOut: string }[] = [];
+  const NO_PUNCH = { timeIn: "", timeOut: "" };
   const skipped: DayNote[] = [];
   const note = (iso: string, reason: string) =>
     skipped.push({ iso, label: fmtLabel(iso), reason });
@@ -137,7 +165,7 @@ export function analyse(buf: Buffer, opts: ParseOptions = {}): ParseResult {
 
     const r = byDate.get(iso);
     if (!r) {
-      missing.push(iso); // no row at all
+      missing.push({ iso, ...NO_PUNCH }); // no row at all
       continue;
     }
 
@@ -155,13 +183,15 @@ export function analyse(buf: Buffer, opts: ParseOptions = {}): ParseResult {
     if (reasons.length) {
       note(iso, reasons.join(", "));
     } else if (!hasPunches(r)) {
-      missing.push(iso); // a row exists, but the clock recorded nothing
+      missing.push({ iso, ...NO_PUNCH }); // a row exists, clock recorded nothing
     } else if (opts.includeAbsent && truthy(r.abs_flag)) {
-      missing.push(iso); // flagged absent even though it was clocked
+      // flagged absent even though it was clocked - carry the times across
+      missing.push({ iso, ...punchWindow(r) });
     }
   }
 
-  const uniqueMissing = [...new Set(missing)].sort();
+  const uniqueMissing = [...new Map(missing.map((m) => [m.iso, m])).values()]
+    .sort((a, b) => (a.iso < b.iso ? -1 : 1));
   skipped.sort((a, b) => (a.iso < b.iso ? -1 : 1));
 
   // Read identity off the whole sheet, not row 0: exports vary the spelling
@@ -180,7 +210,7 @@ export function analyse(buf: Buffer, opts: ParseOptions = {}): ParseResult {
     rangeStart: start,
     rangeEnd: end,
     rowCount: present.size,
-    missing: uniqueMissing.map((iso) => ({ iso, label: fmtLabel(iso) })),
+    missing: uniqueMissing.map((m) => ({ ...m, label: fmtLabel(m.iso) })),
     skipped,
     employees,
   };

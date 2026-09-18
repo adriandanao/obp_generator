@@ -32,7 +32,8 @@ export type ParseResult = {
   rangeStart: string;
   rangeEnd: string;
   rowCount: number;
-  missing: { iso: string; label: string }[];
+  /** timeIn/timeOut are whatever the clock recorded, blank when it recorded nothing. */
+  missing: { iso: string; label: string; timeIn: string; timeOut: string }[];
   skipped: DayNote[];
   /** Every empno in the file, so the UI can offer a picker. */
   employees: { empno: string; name: string }[];
