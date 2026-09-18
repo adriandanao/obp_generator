@@ -122,9 +122,10 @@ details, the type of leave, and one or more periods. **Each period prints its
 own form**, since the form carries a single From / To / No. of days. Add a
 period for each unbroken stretch of leave.
 
-- **No. of days** counts Mon–Fri only and updates as you change the dates;
-  type over it for half-days or a different counting rule and it stops
-  tracking.
+- **No. of days** counts Mon–Fri in the range and updates as you change the
+  dates; type over it and it stops tracking. The form has no half-day control,
+  so a half-day is filed by putting `0.5` here — the value is printed verbatim,
+  whatever it is.
 - **Record the dates under** picks the VL or SL column for the From / To /
   No. of days values. It follows the leave type (Sick → SL, everything else →
   VL) until you override it.

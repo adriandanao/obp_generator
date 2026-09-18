@@ -209,8 +209,9 @@ export default function LeavePage() {
       <section className="panel">
         <h2>3 &middot; Periods</h2>
         <p className="hint" style={{ marginTop: 0, marginBottom: 12 }}>
-          Each period prints its own form. Days counts Mon&ndash;Fri only &mdash;
-          type over it for half-days or a different rule.
+          Each period prints its own form. Days counts Mon&ndash;Fri in the
+          range &mdash; type over it for a half-day (<code>0.5</code>) or any
+          other count.
         </p>
 
         <div className="tbl-wrap">

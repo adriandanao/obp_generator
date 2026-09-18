@@ -53,7 +53,7 @@ export type LeavePeriod = {
   /** ISO yyyy-mm-dd */
   from: string;
   to: string;
-  /** Free text so half-days ("2.5") and local counting rules survive. */
+  /** Free text: a half-day is 0.5, and any local counting rule survives. */
   days: string;
 };
 
