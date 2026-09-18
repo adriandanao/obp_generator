@@ -150,13 +150,16 @@ def punch_window(row):
     return time_in, time_out
 
 
-def has_punches(row):
-    """Did the clock register anything that day?
+def is_fully_clocked(row):
+    """Did the clock account for the whole day - punched in *and* out?
 
-    A day with no punch at all is a day not worked - far more reliable than
-    abs_flag, which some exports also set on days that were plainly worked.
+    Anything less needs explaining: no punch at all is a day not worked, and a
+    punch on one side only is a day someone left without tapping out, which is
+    precisely what an OB slip covers.  Far more reliable than abs_flag, which
+    some exports set on days plainly worked and clear on days that plainly
+    were not.
     """
-    return any(punch_window(row))
+    return all(punch_window(row))
 
 
 def is_rest_day(row):
@@ -531,10 +534,13 @@ def find_missing(rows, present, start, end, holidays, include_absent):
 
             if reasons:
                 skipped.append((day, "in file: " + ", ".join(reasons)))
-            elif not has_punches(r):
-                missing.append(day)                   # row exists, clock silent
+            elif not is_fully_clocked(r):
+                # Nothing recorded, or only one side of the day.
+                missing.append(day)
+                punches[day] = punch_window(r)
             elif include_absent and truthy(r.get("abs_flag")):
-                missing.append(day)                   # flagged absent, but clocked
+                # Clocked in and out, yet flagged absent - an anomaly.
+                missing.append(day)
                 punches[day] = punch_window(r)
 
         day += dt.timedelta(days=1)

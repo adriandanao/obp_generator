@@ -48,13 +48,17 @@ export function punchWindow(row: Record<string, unknown>): {
 }
 
 /**
- * Did the clock register anything that day?  A day with no punch at all is a
- * day not worked - a far more reliable signal than abs_flag, which some
- * exports also set on days that were plainly worked.
+ * Did the clock account for the whole day - punched in *and* out?
+ *
+ * Anything less needs explaining: no punch at all is a day not worked, and a
+ * punch on one side only is a day someone left without tapping out, which is
+ * precisely what an OB slip covers.  This is a far more reliable signal than
+ * abs_flag, which some exports set on days that were plainly worked and clear
+ * on days that plainly were not.
  */
-export function hasPunches(row: Record<string, unknown>): boolean {
+export function isFullyClocked(row: Record<string, unknown>): boolean {
   const { timeIn, timeOut } = punchWindow(row);
-  return Boolean(timeIn || timeOut);
+  return Boolean(timeIn && timeOut);
 }
 
 /** Rest days show up as do_flag, or as an ss_code ending in "DO". */
@@ -182,11 +186,17 @@ export function analyse(buf: Buffer, opts: ParseOptions = {}): ParseResult {
 
     if (reasons.length) {
       note(iso, reasons.join(", "));
-    } else if (!hasPunches(r)) {
-      missing.push({ iso, ...NO_PUNCH }); // a row exists, clock recorded nothing
+      continue;
+    }
+
+    const clock = punchWindow(r);
+    if (!isFullyClocked(r)) {
+      // Nothing recorded, or only one side of the day. Either way it needs a
+      // slip, and whatever the clock did catch is carried across.
+      missing.push({ iso, ...clock });
     } else if (opts.includeAbsent && truthy(r.abs_flag)) {
-      // flagged absent even though it was clocked - carry the times across
-      missing.push({ iso, ...punchWindow(r) });
+      // Clocked in and out, yet flagged absent - an anomaly worth seeing.
+      missing.push({ iso, ...clock });
     }
   }
 

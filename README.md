@@ -61,17 +61,23 @@ days works with or without a file; re-scanning a file replaces the list.
 
 1. **Upload** — the export is read with SheetJS, which handles the old BIFF2
    `.XLS` these systems produce as well as modern `.xlsx`.
-2. **Scan** — a Mon–Fri date is a missing work day when it has *no row at all*,
-   or has a row **the clock never registered** (no `in1…in25` / `out1…out25`).
+2. **Scan** — a Mon–Fri date needs a slip **unless the clock recorded both an
+   in and an out**. That covers two cases:
+
+   - *no row, or no punches* — a day not worked;
+   - *a punch on one side only* — clocked in at 07:44 and never out, which is
+     exactly what an OB slip explains. These are easy to miss because the day
+     looks worked at a glance.
+
    Holidays, rest days and approved leave are listed as skipped, never offered.
-   Weekends are neither. The range defaults to the cut-off period you are
-   currently filing for (below).
+   Weekends are neither.
 
    Punches, not `abs_flag`, are the signal: the exports set `abs_flag` on days
-   that were plainly worked — clocked in at 07:54 and out at 18:02 — so trusting
-   it alone produces slips for days you were present. Rest days likewise show up
-   as an `ss_code` ending in `DO` rather than as `do_flag`. Tick **Also include
-   days flagged absent that do have clock-ins** to see those anomalies anyway.
+   that were plainly worked — clocked in at 08:05 and out at 17:44 — and clear
+   it on days that plainly were not, so it is wrong in both directions. Rest
+   days likewise show up as an `ss_code` ending in `DO` rather than as
+   `do_flag`. Tick **Also include days flagged absent that were clocked in and
+   out** to see that anomaly anyway.
 3. **Fill** — one row per missing day. *Copy first row down* propagates the
    first row's details to the rest, which is usually what you want.
 4. **Print** — four entries per slip and two slip-sized halves per page.
